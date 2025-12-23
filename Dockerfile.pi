@@ -27,6 +27,7 @@ RUN pip install --no-cache-dir -r requirements.txt -r requirements-pi.txt
 # Copy application
 COPY app.py .
 COPY templates/ templates/
+COPY widgets/ widgets/
 
 # Create data directory
 RUN mkdir -p /app/data/photos
