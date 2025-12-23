@@ -1,0 +1,24 @@
+# Inky Frame - Docker Compose configuration
+# 
+# Development: docker compose up
+# Raspberry Pi: docker compose -f docker-compose.yml -f docker-compose.pi.yml up
+
+services:
+  inky-frame:
+    build: .
+    container_name: inky-frame
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - inky-data:/app/data
+    environment:
+      - DATA_DIR=/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  inky-data:

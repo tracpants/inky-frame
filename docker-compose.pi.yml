@@ -1,0 +1,17 @@
+# Inky Frame - Raspberry Pi hardware override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d
+
+services:
+  inky-frame:
+    build:
+      context: .
+      dockerfile: Dockerfile.pi
+    # Required for GPIO/SPI/I2C access
+    privileged: true
+    devices:
+      - /dev/gpiomem:/dev/gpiomem
+      - /dev/spidev0.0:/dev/spidev0.0
+      - /dev/i2c-1:/dev/i2c-1
+    volumes:
+      - inky-data:/app/data
+      - /sys:/sys  # For GPIO access

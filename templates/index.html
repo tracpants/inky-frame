@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inky Frame</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+    <style>
+        :root {
+            --bg: #1a1a2e;
+            --surface: #16213e;
+            --surface-hover: #1f3460;
+            --primary: #e94560;
+            --primary-hover: #ff6b6b;
+            --text: #eaeaea;
+            --text-muted: #a0a0a0;
+            --success: #4ade80;
+            --border: #2d3a5a;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+        
+        h1 span {
+            color: var(--primary);
+        }
+        
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+        }
+        
+        .status-dot.off {
+            background: var(--text-muted);
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 24px;
+        }
+        
+        @media (max-width: 900px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        @media (max-width: 600px) {
+            body {
+                padding: 12px;
+            }
+            
+            .grid {
+                gap: 16px;
+            }
+        }
+        
+        .card {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        @media (max-width: 600px) {
+            .card {
+                padding: 16px;
+                border-radius: 10px;
+            }
+        }
+        
+        .card h2 {
+            font-size: 1.1rem;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .upload-zone {
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: var(--primary);
+            background: rgba(233, 69, 96, 0.1);
+        }
+        
+        .upload-zone input {
+            display: none;
+        }
+        
+        .upload-icon {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 18px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: var(--primary-hover);
+        }
+        
+        .btn-secondary {
+            background: var(--surface-hover);
+            color: var(--text);
+        }
+        
+        .btn-secondary:hover {
+            background: #2a4070;
+        }
+        
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 0.8rem;
+        }
+        
+        .btn-icon {
+            padding: 8px;
+            border-radius: 6px;
+        }
+        
+        .photos-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 12px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        @media (max-width: 600px) {
+            .photos-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+                max-height: none;
+            }
+        }
+        
+        .photo-card {
+            position: relative;
+            aspect-ratio: 800/480;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .photo-card:hover {
+            border-color: var(--primary);
+        }
+        
+        .photo-card.current {
+            border-color: var(--success);
+        }
+        
+        .photo-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        /* Mobile: always show overlay for touch */
+        @media (max-width: 600px) {
+            .photo-card .overlay {
+                opacity: 1;
+                background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%);
+                align-items: flex-end;
+                padding-bottom: 8px;
+            }
+        }
+        
+        .photo-card .overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        
+        .photo-card:hover .overlay {
+            opacity: 1;
+        }
+        
+        .photo-card .current-badge {
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            background: var(--success);
+            color: black;
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        
+        .settings-group {
+            margin-bottom: 20px;
+        }
+        
+        .settings-group label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+        
+        .toggle {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .toggle-switch {
+            position: relative;
+            width: 48px;
+            height: 26px;
+            background: var(--border);
+            border-radius: 13px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .toggle-switch.active {
+            background: var(--primary);
+        }
+        
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.2s;
+        }
+        
+        .toggle-switch.active::after {
+            transform: translateX(22px);
+        }
+        
+        select, input[type="number"] {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 0.9rem;
+        }
+        
+        select:focus, input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        
+        .interval-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .interval-row input {
+            width: 80px;
+        }
+        
+        .interval-row select {
+            flex: 1;
+        }
+        
+        /* Crop Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .modal.active {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: var(--surface);
+            border-radius: 12px;
+            max-width: 900px;
+            width: 100%;
+            margin: auto;
+        }
+        
+        @media (max-width: 600px) {
+            .modal {
+                padding: 10px;
+            }
+            
+            .modal-content {
+                border-radius: 10px;
+            }
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .modal-header h3 {
+            font-size: 1.1rem;
+        }
+        
+        .modal-body {
+            padding: 20px;
+        }
+        
+        @media (max-width: 600px) {
+            .modal-body {
+                padding: 12px;
+            }
+        }
+        
+        .crop-container {
+            max-height: 50vh;
+            background: var(--bg);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        @media (max-width: 600px) {
+            .crop-container {
+                max-height: 35vh;
+            }
+        }
+        
+        .crop-container img {
+            max-width: 100%;
+            display: block;
+        }
+        
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 16px 20px;
+            border-top: 1px solid var(--border);
+        }
+        
+        .preview-display {
+            background: var(--bg);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .preview-display .aspect-box {
+            aspect-ratio: 800/480;
+            background: #000;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        
+        .preview-display img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        
+        .preview-display .label {
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+        }
+        
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--surface);
+            padding: 12px 20px;
+            border-radius: 8px;
+            border-left: 4px solid var(--success);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 1001;
+        }
+        
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        
+        .toast.error {
+            border-left-color: var(--primary);
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--text-muted);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .crop-orientation-toggle {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        
+        .orientation-btn {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            padding: 12px;
+            background: var(--bg);
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .orientation-btn:hover {
+            border-color: var(--primary);
+            color: var(--text);
+        }
+        
+        .orientation-btn.active {
+            border-color: var(--primary);
+            background: rgba(233, 69, 96, 0.15);
+            color: var(--text);
+        }
+        
+        .orientation-btn .orientation-icon {
+            font-size: 1.5rem;
+            line-height: 1;
+        }
+        
+        .orientation-btn .orientation-size {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        
+        /* Image Adjustments */
+        .image-adjustments {
+            margin-top: 16px;
+            padding: 16px;
+            background: var(--bg);
+            border-radius: 8px;
+        }
+        
+        .adjustment-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            font-weight: 500;
+        }
+        
+        .adjustment-sliders {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        @media (min-width: 600px) {
+            .adjustment-sliders {
+                flex-direction: row;
+                gap: 16px;
+            }
+            
+            .slider-group {
+                flex: 1;
+            }
+        }
+        
+        .slider-group label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            margin-bottom: 6px;
+            color: var(--text-muted);
+        }
+        
+        .slider-value {
+            color: var(--text);
+            font-weight: 500;
+        }
+        
+        .slider-group input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: var(--border);
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        .slider-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+        }
+        
+        .slider-group input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+            border: none;
+        }
+        
+        .adjustment-presets {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+        
+        .preset-btn {
+            flex: 1;
+            min-width: 100px;
+            padding: 8px 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .preset-btn:hover {
+            border-color: var(--primary);
+            background: var(--surface-hover);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Inky <span>Frame</span></h1>
+            <div class="status">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Ready</span>
+            </div>
+        </header>
+        
+        <div class="grid">
+            <main>
+                <div class="card">
+                    <h2>📷 Upload Photo</h2>
+                    <div class="upload-zone" id="uploadZone">
+                        <input type="file" id="fileInput" accept="image/*">
+                        <div class="upload-icon">📁</div>
+                        <p>Drop image here or click to browse</p>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 8px;">
+                            Recommended: 800×480 for best results
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h2>🖼️ Photos</h2>
+                    <div class="photos-grid" id="photosGrid">
+                        {% if photos %}
+                            {% for photo in photos %}
+                            <div class="photo-card {% if config.current_photo == photo %}current{% endif %}" data-name="{{ photo }}">
+                                <img src="/photos/{{ photo }}" loading="lazy">
+                                {% if config.current_photo == photo %}
+                                <div class="current-badge">NOW</div>
+                                {% endif %}
+                                <div class="overlay">
+                                    <button class="btn btn-primary btn-sm" onclick="displayPhoto('{{ photo }}')">Show</button>
+                                    <button class="btn btn-secondary btn-sm" onclick="deletePhoto('{{ photo }}')">🗑️</button>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="empty-state">
+                                <p>No photos yet. Upload some!</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </main>
+            
+            <aside>
+                <div class="card">
+                    <h2>📺 Display Preview</h2>
+                    <div class="preview-display">
+                        <div class="aspect-box">
+                            {% if config.current_photo %}
+                            <img src="/photos/{{ config.current_photo }}" id="previewImg">
+                            {% else %}
+                            <span style="color: var(--text-muted);">No image displayed</span>
+                            {% endif %}
+                        </div>
+                        <div class="label">{{ display_width }}×{{ display_height }} • 7 colors</div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h2>⚙️ Settings</h2>
+                    
+                    <div class="settings-group">
+                        <label>Auto-cycle photos</label>
+                        <div class="toggle">
+                            <div class="toggle-switch {% if config.cycle_enabled %}active{% endif %}" id="cycleToggle"></div>
+                            <span id="cycleStatus">{% if config.cycle_enabled %}On{% else %}Off{% endif %}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-group">
+                        <label>Cycle interval</label>
+                        <div class="interval-row">
+                            <input type="number" id="intervalValue" value="{{ (config.cycle_interval / 60)|int }}" min="1">
+                            <select id="intervalUnit">
+                                <option value="60" {% if config.cycle_interval < 3600 %}selected{% endif %}>minutes</option>
+                                <option value="3600" {% if config.cycle_interval >= 3600 %}selected{% endif %}>hours</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-group">
+                        <label>Orientation</label>
+                        <select id="orientationSelect">
+                            <option value="landscape" {% if config.orientation == 'landscape' %}selected{% endif %}>Landscape (800×480)</option>
+                            <option value="portrait" {% if config.orientation == 'portrait' %}selected{% endif %}>Portrait (480×800)</option>
+                        </select>
+                    </div>
+                    
+                    <button class="btn btn-primary" style="width: 100%;" onclick="saveSettings()">
+                        Save Settings
+                    </button>
+                </div>
+            </aside>
+        </div>
+    </div>
+    
+    <!-- Crop Modal -->
+    <div class="modal" id="cropModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Crop & Adjust</h3>
+                <button class="btn btn-icon btn-secondary" onclick="closeCropModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="crop-orientation-toggle">
+                    <button class="orientation-btn active" data-orientation="landscape" onclick="setCropOrientation('landscape')">
+                        <span class="orientation-icon">▬</span>
+                        Landscape
+                        <span class="orientation-size">800×480</span>
+                    </button>
+                    <button class="orientation-btn" data-orientation="portrait" onclick="setCropOrientation('portrait')">
+                        <span class="orientation-icon">▮</span>
+                        Portrait
+                        <span class="orientation-size">480×800</span>
+                    </button>
+                </div>
+                <div class="crop-container">
+                    <img id="cropImage" src="">
+                </div>
+                
+                <div class="image-adjustments">
+                    <div class="adjustment-header">
+                        <span>🎨 Image Adjustments</span>
+                        <button class="btn btn-sm btn-secondary" onclick="resetAdjustments()">Reset</button>
+                    </div>
+                    <div class="adjustment-sliders">
+                        <div class="slider-group">
+                            <label>
+                                <span>Brightness</span>
+                                <span class="slider-value" id="brightnessValue">100%</span>
+                            </label>
+                            <input type="range" id="brightnessSlider" min="50" max="150" value="100" oninput="updateAdjustments()">
+                        </div>
+                        <div class="slider-group">
+                            <label>
+                                <span>Contrast</span>
+                                <span class="slider-value" id="contrastValue">100%</span>
+                            </label>
+                            <input type="range" id="contrastSlider" min="50" max="200" value="100" oninput="updateAdjustments()">
+                        </div>
+                        <div class="slider-group">
+                            <label>
+                                <span>Saturation</span>
+                                <span class="slider-value" id="saturationValue">100%</span>
+                            </label>
+                            <input type="range" id="saturationSlider" min="0" max="200" value="100" oninput="updateAdjustments()">
+                        </div>
+                    </div>
+                    <div class="adjustment-presets">
+                        <button class="preset-btn" onclick="applyPreset('eink')">📺 E-Ink Optimized</button>
+                        <button class="preset-btn" onclick="applyPreset('vivid')">🌈 Vivid</button>
+                        <button class="preset-btn" onclick="applyPreset('bw')">⬛ High Contrast B&W</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeCropModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveCroppedImage()">
+                    Save & Upload
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="toast" id="toast"></div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+    <script>
+        let cropper = null;
+        let currentFile = null;
+        let cropOrientation = 'landscape'; // Track orientation for crop modal
+        
+        // Image adjustment state
+        let adjustments = {
+            brightness: 100,
+            contrast: 100,
+            saturation: 100
+        };
+        
+        const DISPLAY_WIDTH = {{ display_width }};
+        const DISPLAY_HEIGHT = {{ display_height }};
+        
+        // Adjustment functions
+        function updateAdjustments() {
+            adjustments.brightness = parseInt(document.getElementById('brightnessSlider').value);
+            adjustments.contrast = parseInt(document.getElementById('contrastSlider').value);
+            adjustments.saturation = parseInt(document.getElementById('saturationSlider').value);
+            
+            // Update value displays
+            document.getElementById('brightnessValue').textContent = adjustments.brightness + '%';
+            document.getElementById('contrastValue').textContent = adjustments.contrast + '%';
+            document.getElementById('saturationValue').textContent = adjustments.saturation + '%';
+            
+            // Apply CSS filter to the cropper container for live preview
+            const cropperContainer = document.querySelector('.cropper-container');
+            if (cropperContainer) {
+                cropperContainer.style.filter = `brightness(${adjustments.brightness}%) contrast(${adjustments.contrast}%) saturate(${adjustments.saturation}%)`;
+            }
+        }
+        
+        function resetAdjustments() {
+            document.getElementById('brightnessSlider').value = 100;
+            document.getElementById('contrastSlider').value = 100;
+            document.getElementById('saturationSlider').value = 100;
+            updateAdjustments();
+        }
+        
+        function applyPreset(preset) {
+            switch(preset) {
+                case 'eink':
+                    // Optimized for e-ink: boost contrast and saturation
+                    document.getElementById('brightnessSlider').value = 105;
+                    document.getElementById('contrastSlider').value = 130;
+                    document.getElementById('saturationSlider').value = 140;
+                    break;
+                case 'vivid':
+                    // Extra vivid colors
+                    document.getElementById('brightnessSlider').value = 100;
+                    document.getElementById('contrastSlider').value = 115;
+                    document.getElementById('saturationSlider').value = 180;
+                    break;
+                case 'bw':
+                    // High contrast black & white
+                    document.getElementById('brightnessSlider').value = 100;
+                    document.getElementById('contrastSlider').value = 180;
+                    document.getElementById('saturationSlider').value = 0;
+                    break;
+            }
+            updateAdjustments();
+        }
+        
+        // Upload handling
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        
+        uploadZone.addEventListener('click', () => fileInput.click());
+        
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+        
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragover');
+        });
+        
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length) handleFile(files[0]);
+        });
+        
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) handleFile(fileInput.files[0]);
+        });
+        
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showToast('Please select an image file', 'error');
+                return;
+            }
+            currentFile = file;
+            openCropModal(file);
+        }
+        
+        function setCropOrientation(orientation) {
+            cropOrientation = orientation;
+            
+            // Update button states
+            document.querySelectorAll('.orientation-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.orientation === orientation);
+            });
+            
+            // Update cropper aspect ratio if it exists
+            if (cropper) {
+                const aspectRatio = orientation === 'portrait' 
+                    ? DISPLAY_HEIGHT / DISPLAY_WIDTH 
+                    : DISPLAY_WIDTH / DISPLAY_HEIGHT;
+                cropper.setAspectRatio(aspectRatio);
+            }
+        }
+        
+        function openCropModal(file) {
+            const modal = document.getElementById('cropModal');
+            const cropImage = document.getElementById('cropImage');
+            
+            // Reset to landscape by default when opening
+            cropOrientation = 'landscape';
+            document.querySelectorAll('.orientation-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.orientation === 'landscape');
+            });
+            
+            // Reset adjustments
+            resetAdjustments();
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                cropImage.src = e.target.result;
+                modal.classList.add('active');
+                
+                // Initialize cropper after image loads
+                cropImage.onload = () => {
+                    if (cropper) cropper.destroy();
+                    
+                    const aspectRatio = cropOrientation === 'portrait' 
+                        ? DISPLAY_HEIGHT / DISPLAY_WIDTH 
+                        : DISPLAY_WIDTH / DISPLAY_HEIGHT;
+                    
+                    cropper = new Cropper(cropImage, {
+                        aspectRatio: aspectRatio,
+                        viewMode: 1,
+                        dragMode: 'move',
+                        autoCropArea: 1,
+                        restore: false,
+                        guides: true,
+                        center: true,
+                        highlight: false,
+                        cropBoxMovable: true,
+                        cropBoxResizable: true,
+                        toggleDragModeOnDblclick: false,
+                    });
+                };
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        function closeCropModal() {
+            const modal = document.getElementById('cropModal');
+            modal.classList.remove('active');
+            if (cropper) {
+                cropper.destroy();
+                cropper = null;
+            }
+        }
+        
+        async function saveCroppedImage() {
+            if (!cropper) return;
+            
+            const width = cropOrientation === 'portrait' ? DISPLAY_HEIGHT : DISPLAY_WIDTH;
+            const height = cropOrientation === 'portrait' ? DISPLAY_WIDTH : DISPLAY_HEIGHT;
+            
+            // Get cropped canvas
+            const croppedCanvas = cropper.getCroppedCanvas({
+                width: width,
+                height: height,
+                imageSmoothingEnabled: true,
+                imageSmoothingQuality: 'high',
+            });
+            
+            // Apply adjustments using a second canvas
+            const finalCanvas = document.createElement('canvas');
+            finalCanvas.width = width;
+            finalCanvas.height = height;
+            const ctx = finalCanvas.getContext('2d');
+            
+            // Apply CSS-like filters via canvas
+            ctx.filter = `brightness(${adjustments.brightness}%) contrast(${adjustments.contrast}%) saturate(${adjustments.saturation}%)`;
+            ctx.drawImage(croppedCanvas, 0, 0);
+            
+            const imageData = finalCanvas.toDataURL('image/png');
+            
+            try {
+                const response = await fetch('/api/photos/upload-cropped', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image: imageData,
+                        filename: currentFile?.name || 'photo'
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    showToast('Photo uploaded successfully!');
+                    closeCropModal();
+                    location.reload();
+                } else {
+                    showToast(result.error || 'Upload failed', 'error');
+                }
+            } catch (err) {
+                showToast('Upload failed: ' + err.message, 'error');
+            }
+        }
+        
+        async function displayPhoto(filename) {
+            setStatus('Updating display...');
+            try {
+                const response = await fetch(`/api/display/${filename}`, { method: 'POST' });
+                const result = await response.json();
+                if (result.success) {
+                    showToast('Display updated! (takes ~25s to refresh)');
+                    updateCurrentPhoto(filename);
+                } else {
+                    showToast('Running in dev mode - display not connected');
+                }
+            } catch (err) {
+                showToast('Error: ' + err.message, 'error');
+            }
+            setStatus('Ready');
+        }
+        
+        async function deletePhoto(filename) {
+            if (!confirm(`Delete ${filename}?`)) return;
+            
+            try {
+                const response = await fetch(`/api/photos/${filename}`, { method: 'DELETE' });
+                const result = await response.json();
+                if (result.success) {
+                    showToast('Photo deleted');
+                    location.reload();
+                } else {
+                    showToast(result.error || 'Delete failed', 'error');
+                }
+            } catch (err) {
+                showToast('Error: ' + err.message, 'error');
+            }
+        }
+        
+        function updateCurrentPhoto(filename) {
+            document.querySelectorAll('.photo-card').forEach(card => {
+                card.classList.remove('current');
+                card.querySelector('.current-badge')?.remove();
+            });
+            
+            const card = document.querySelector(`.photo-card[data-name="${filename}"]`);
+            if (card) {
+                card.classList.add('current');
+                const badge = document.createElement('div');
+                badge.className = 'current-badge';
+                badge.textContent = 'NOW';
+                card.appendChild(badge);
+            }
+            
+            const preview = document.getElementById('previewImg');
+            if (preview) {
+                preview.src = `/photos/${filename}`;
+            }
+        }
+        
+        // Settings
+        const cycleToggle = document.getElementById('cycleToggle');
+        cycleToggle.addEventListener('click', () => {
+            cycleToggle.classList.toggle('active');
+            document.getElementById('cycleStatus').textContent = 
+                cycleToggle.classList.contains('active') ? 'On' : 'Off';
+        });
+        
+        async function saveSettings() {
+            const cycleEnabled = cycleToggle.classList.contains('active');
+            const intervalValue = parseInt(document.getElementById('intervalValue').value);
+            const intervalUnit = parseInt(document.getElementById('intervalUnit').value);
+            const orientation = document.getElementById('orientationSelect').value;
+            
+            try {
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        cycle_enabled: cycleEnabled,
+                        cycle_interval: intervalValue * intervalUnit,
+                        orientation: orientation
+                    })
+                });
+                
+                const result = await response.json();
+                showToast('Settings saved!');
+                
+                // Update status
+                const statusDot = document.getElementById('statusDot');
+                if (cycleEnabled) {
+                    statusDot.classList.remove('off');
+                } else {
+                    statusDot.classList.add('off');
+                }
+            } catch (err) {
+                showToast('Error saving settings: ' + err.message, 'error');
+            }
+        }
+        
+        function setStatus(text) {
+            document.getElementById('statusText').textContent = text;
+        }
+        
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast show' + (type === 'error' ? ' error' : '');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+        
+        // Initialize status
+        const config = {{ config | tojson }};
+        if (!config.cycle_enabled) {
+            document.getElementById('statusDot').classList.add('off');
+        }
+    </script>
+</body>
+</html>
