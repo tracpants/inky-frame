@@ -688,12 +688,18 @@
         
         .position-preview {
             width: 120px;
-            height: 72px; /* 800x480 aspect ratio */
+            height: 72px; /* 800x480 aspect ratio - landscape default */
             background: var(--surface-hover);
             border: 2px solid var(--border);
             border-radius: 6px;
             position: relative;
             cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .position-preview.portrait {
+            width: 72px;
+            height: 120px; /* 480x800 aspect ratio */
         }
         
         .position-marker {
@@ -1396,7 +1402,7 @@
             const intervalValue = parseInt(document.getElementById('intervalValue').value);
             const intervalUnit = parseInt(document.getElementById('intervalUnit').value);
             const orientation = document.getElementById('orientationSelect').value;
-            
+
             try {
                 const response = await fetch('/api/config', {
                     method: 'POST',
@@ -1407,10 +1413,10 @@
                         orientation: orientation
                     })
                 });
-                
+
                 const result = await response.json();
                 showToast('Settings saved!');
-                
+
                 // Update status
                 const statusDot = document.getElementById('statusDot');
                 if (cycleEnabled) {
@@ -1418,8 +1424,24 @@
                 } else {
                     statusDot.classList.add('off');
                 }
+
+                // Update widget position preview to match new orientation
+                updatePositionPreviewOrientation();
             } catch (err) {
                 showToast('Error saving settings: ' + err.message, 'error');
+            }
+        }
+
+        function updatePositionPreviewOrientation() {
+            const orientation = document.getElementById('orientationSelect').value;
+            const positionPreview = document.getElementById('datePositionPreview');
+
+            if (positionPreview) {
+                if (orientation === 'portrait') {
+                    positionPreview.classList.add('portrait');
+                } else {
+                    positionPreview.classList.remove('portrait');
+                }
             }
         }
         
@@ -1724,12 +1746,66 @@
             widgetConfig.date.position.y = parseInt(y);
         }
         
+        let fontSizeUpdateTimeout = null;
+
         function updateDateFontSize() {
             const size = document.getElementById('dateFontSizeSlider').value;
             document.getElementById('dateFontSizeValue').textContent = size;
-            
+
             // Update config
             widgetConfig.date.style.font_size = parseInt(size);
+
+            // Debounce preview updates to avoid too many API calls
+            if (fontSizeUpdateTimeout) {
+                clearTimeout(fontSizeUpdateTimeout);
+            }
+
+            fontSizeUpdateTimeout = setTimeout(() => {
+                // Only update preview if widget is enabled
+                if (widgetConfig.date.enabled) {
+                    updateWidgetPreview();
+                }
+            }, 300); // Wait 300ms after user stops dragging
+        }
+
+        async function updateWidgetPreview() {
+            try {
+                // Get current photo for preview
+                const photos = document.querySelectorAll('.photo-card');
+                let currentPhoto = null;
+
+                // Find current photo or use first available
+                for (const photo of photos) {
+                    if (photo.classList.contains('current')) {
+                        currentPhoto = photo.dataset.name;
+                        break;
+                    }
+                }
+
+                if (!currentPhoto && photos.length > 0) {
+                    currentPhoto = photos[0].dataset.name;
+                }
+
+                // Update widget config from UI
+                updateConfigFromUI();
+
+                const response = await fetch('/api/widgets/preview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        photo: currentPhoto,
+                        widgets: widgetConfig,
+                        orientation: document.getElementById('orientationSelect').value
+                    })
+                });
+
+                const result = await response.json();
+                if (result.preview) {
+                    document.getElementById('widgetPreviewImage').src = result.preview;
+                }
+            } catch (err) {
+                console.error('Error updating widget preview:', err);
+            }
         }
         
         function applyDateColorPreset() {
@@ -1828,29 +1904,32 @@
             dateToggle.addEventListener('click', () => {
                 dateToggle.classList.toggle('active');
                 widgetConfig.date.enabled = dateToggle.classList.contains('active');
-                
+
                 const configDiv = document.getElementById('dateWidgetConfig');
                 configDiv.style.display = widgetConfig.date.enabled ? 'block' : 'none';
             });
-            
+
             // Set up position preview click
             const positionPreview = document.getElementById('datePositionPreview');
             positionPreview.addEventListener('click', (e) => {
                 const rect = positionPreview.getBoundingClientRect();
                 const x = ((e.clientX - rect.left) / rect.width) * 100;
                 const y = ((e.clientY - rect.top) / rect.height) * 100;
-                
+
                 // Clamp values
                 const clampedX = Math.max(0, Math.min(95, x));
                 const clampedY = Math.max(0, Math.min(90, y));
-                
+
                 document.getElementById('dateXSlider').value = clampedX;
                 document.getElementById('dateYSlider').value = clampedY;
                 updateDatePosition();
             });
-            
+
             // Initialize widgets
             initializeWidgets();
+
+            // Initialize position preview orientation
+            updatePositionPreviewOrientation();
         });
     </script>
 </body>
