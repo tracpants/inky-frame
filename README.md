@@ -6,9 +6,18 @@ A web-based photo frame controller for the Pimoroni Inky Impression 7.3" e-ink d
 
 - **Web UI** - Upload and manage photos from any device on your network
 - **Crop Tool** - Visual cropping with correct 800×480 aspect ratio
+- **Display Widgets** - Overlay date and other information on photos
 - **Auto-Cycling** - Automatically rotate through photos at configurable intervals
 - **Orientation Support** - Landscape (800×480) or Portrait (480×800) modes
 - **Docker Packaged** - Easy deployment and development
+
+### Widget System
+
+- **Modular Design** - Easy to add new widget types (weather, calendar, etc.)
+- **Date Widget** - Show current date in multiple formats with customizable styling
+- **Drag & Drop Positioning** - Visual positioning with click-to-place functionality
+- **Live Preview** - See widgets overlaid on your photos before applying
+- **Orientation Aware** - Different widget positions for landscape vs portrait modes
 
 ## Hardware Requirements
 
@@ -44,7 +53,7 @@ A web-based photo frame controller for the Pimoroni Inky Impression 7.3" e-ink d
    ```
 
 5. **Access the UI:**
-   Open `http://<pi-ip>:5000` in your browser
+   Open `http://<pi-ip>:5001` in your browser
 
 ### For Development (without hardware)
 
@@ -53,6 +62,16 @@ docker compose up
 ```
 
 The web UI will work without the display - you'll see "dev mode" messages when trying to update the display.
+
+### For Production Deployment
+
+```bash
+# With hardware (recommended)
+docker compose -f docker-compose.yml -f docker-compose.pi.yml -f docker-compose.prod.yml up -d
+
+# Development with gunicorn
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
 
 ## Configuration
 
@@ -74,6 +93,8 @@ docker run --rm -v inky-data:/data -v $(pwd):/backup alpine tar czf /backup/inky
 
 ## API Endpoints
 
+### Core Endpoints
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/config` | GET/POST | Get or update settings |
@@ -83,6 +104,16 @@ docker run --rm -v inky-data:/data -v $(pwd):/backup alpine tar czf /backup/inky
 | `/api/photos/<n>` | DELETE | Delete a photo |
 | `/api/display/<n>` | POST | Display a specific photo |
 | `/photos/<n>` | GET | Serve photo file |
+
+### Widget Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/widgets` | GET | List available widgets and current config |
+| `/api/widgets/<type>` | GET/POST | Get or update specific widget configuration |
+| `/api/widgets/<type>/options` | GET | Get widget-specific options (formats, presets) |
+| `/api/widgets/preview` | POST | Generate preview with widgets overlaid |
+| `/photos/<filename>/with-widgets` | GET | Serve photo with widgets overlaid |
 
 ## Display Notes
 
