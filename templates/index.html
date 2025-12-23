@@ -632,6 +632,33 @@
             border-color: var(--primary);
             background: var(--surface-hover);
         }
+        
+        /* Preview Modal Specific */
+        .preview-container {
+            max-height: 60vh;
+            background: var(--bg);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        
+        .preview-container img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            border-radius: 6px;
+            transition: filter 0.2s ease;
+        }
+        
+        @media (max-width: 600px) {
+            .preview-container {
+                max-height: 40vh;
+            }
+        }
     </style>
 </head>
 <body>
@@ -663,14 +690,14 @@
                     <div class="photos-grid" id="photosGrid">
                         {% if photos %}
                             {% for photo in photos %}
-                            <div class="photo-card {% if config.current_photo == photo %}current{% endif %}" data-name="{{ photo }}">
+                            <div class="photo-card {% if config.current_photo == photo %}current{% endif %}" data-name="{{ photo }}" onclick="openPreviewModal('{{ photo }}')">
                                 <img src="/photos/{{ photo }}" loading="lazy">
                                 {% if config.current_photo == photo %}
                                 <div class="current-badge">NOW</div>
                                 {% endif %}
                                 <div class="overlay">
-                                    <button class="btn btn-primary btn-sm" onclick="displayPhoto('{{ photo }}')">Show</button>
-                                    <button class="btn btn-secondary btn-sm" onclick="deletePhoto('{{ photo }}')">🗑️</button>
+                                    <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); displayPhoto('{{ photo }}')">📺 Show</button>
+                                    <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); deletePhoto('{{ photo }}')">🗑️</button>
                                 </div>
                             </div>
                             {% endfor %}
@@ -800,6 +827,62 @@
                 <button class="btn btn-primary" onclick="saveCroppedImage()">
                     Save & Upload
                 </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Preview Modal -->
+    <div class="modal" id="previewModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Photo Preview</h3>
+                <button class="btn btn-icon btn-secondary" onclick="closePreviewModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="preview-container">
+                    <img id="previewImage" src="" alt="Photo preview">
+                </div>
+                
+                <div class="image-adjustments">
+                    <div class="adjustment-header">
+                        <span>🎨 E-Ink Display Optimization</span>
+                        <button class="btn btn-sm btn-secondary" onclick="resetPreviewAdjustments()">Reset</button>
+                    </div>
+                    <div class="adjustment-sliders">
+                        <div class="slider-group">
+                            <label>
+                                <span>Brightness</span>
+                                <span class="slider-value" id="previewBrightnessValue">100%</span>
+                            </label>
+                            <input type="range" id="previewBrightnessSlider" min="50" max="150" value="100" oninput="updatePreviewAdjustments()">
+                        </div>
+                        <div class="slider-group">
+                            <label>
+                                <span>Contrast</span>
+                                <span class="slider-value" id="previewContrastValue">100%</span>
+                            </label>
+                            <input type="range" id="previewContrastSlider" min="50" max="200" value="100" oninput="updatePreviewAdjustments()">
+                        </div>
+                        <div class="slider-group">
+                            <label>
+                                <span>Saturation</span>
+                                <span class="slider-value" id="previewSaturationValue">100%</span>
+                            </label>
+                            <input type="range" id="previewSaturationSlider" min="0" max="200" value="100" oninput="updatePreviewAdjustments()">
+                        </div>
+                    </div>
+                    <div class="adjustment-presets">
+                        <button class="preset-btn" onclick="applyPreviewPreset('eink')">📺 E-Ink Optimized</button>
+                        <button class="preset-btn" onclick="applyPreviewPreset('vivid')">🌈 Vivid</button>
+                        <button class="preset-btn" onclick="applyPreviewPreset('bw')">⬛ High Contrast B&W</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closePreviewModal()">Close</button>
+                <button class="btn btn-secondary" onclick="openCropFromPreview()" id="editFurtherBtn">✂️ Edit Further</button>
+                <button class="btn btn-primary" onclick="saveAdjustedPreview()" id="saveAdjustedBtn" style="display: none;">💾 Save Adjusted</button>
+                <button class="btn btn-primary" onclick="displayPreviewPhoto()">📺 Display Now</button>
             </div>
         </div>
     </div>
@@ -1135,6 +1218,199 @@
         const config = {{ config | tojson }};
         if (!config.cycle_enabled) {
             document.getElementById('statusDot').classList.add('off');
+        }
+        
+        // Preview modal functionality
+        let currentPreviewPhoto = null;
+        let previewAdjustments = {
+            brightness: 100,
+            contrast: 100,
+            saturation: 100
+        };
+        let hasPreviewAdjustments = false;
+        
+        function openPreviewModal(filename) {
+            currentPreviewPhoto = filename;
+            const modal = document.getElementById('previewModal');
+            const previewImage = document.getElementById('previewImage');
+            
+            // Reset adjustments
+            resetPreviewAdjustments();
+            hasPreviewAdjustments = false;
+            document.getElementById('saveAdjustedBtn').style.display = 'none';
+            
+            // Load the image
+            previewImage.src = `/photos/${filename}`;
+            modal.classList.add('active');
+            
+            // Update modal title with filename
+            modal.querySelector('.modal-header h3').textContent = `Preview: ${filename}`;
+        }
+        
+        function closePreviewModal() {
+            const modal = document.getElementById('previewModal');
+            modal.classList.remove('active');
+            currentPreviewPhoto = null;
+            hasPreviewAdjustments = false;
+        }
+        
+        function updatePreviewAdjustments() {
+            previewAdjustments.brightness = parseInt(document.getElementById('previewBrightnessSlider').value);
+            previewAdjustments.contrast = parseInt(document.getElementById('previewContrastSlider').value);
+            previewAdjustments.saturation = parseInt(document.getElementById('previewSaturationSlider').value);
+            
+            // Update value displays
+            document.getElementById('previewBrightnessValue').textContent = previewAdjustments.brightness + '%';
+            document.getElementById('previewContrastValue').textContent = previewAdjustments.contrast + '%';
+            document.getElementById('previewSaturationValue').textContent = previewAdjustments.saturation + '%';
+            
+            // Apply CSS filter to the preview image
+            const previewImage = document.getElementById('previewImage');
+            if (previewImage) {
+                previewImage.style.filter = `brightness(${previewAdjustments.brightness}%) contrast(${previewAdjustments.contrast}%) saturate(${previewAdjustments.saturation}%)`;
+            }
+            
+            // Check if adjustments have been made
+            hasPreviewAdjustments = (
+                previewAdjustments.brightness !== 100 || 
+                previewAdjustments.contrast !== 100 || 
+                previewAdjustments.saturation !== 100
+            );
+            
+            // Show/hide save button
+            document.getElementById('saveAdjustedBtn').style.display = hasPreviewAdjustments ? 'inline-flex' : 'none';
+        }
+        
+        function resetPreviewAdjustments() {
+            document.getElementById('previewBrightnessSlider').value = 100;
+            document.getElementById('previewContrastSlider').value = 100;
+            document.getElementById('previewSaturationSlider').value = 100;
+            updatePreviewAdjustments();
+        }
+        
+        function applyPreviewPreset(preset) {
+            switch(preset) {
+                case 'eink':
+                    document.getElementById('previewBrightnessSlider').value = 105;
+                    document.getElementById('previewContrastSlider').value = 130;
+                    document.getElementById('previewSaturationSlider').value = 140;
+                    break;
+                case 'vivid':
+                    document.getElementById('previewBrightnessSlider').value = 100;
+                    document.getElementById('previewContrastSlider').value = 115;
+                    document.getElementById('previewSaturationSlider').value = 180;
+                    break;
+                case 'bw':
+                    document.getElementById('previewBrightnessSlider').value = 100;
+                    document.getElementById('previewContrastSlider').value = 180;
+                    document.getElementById('previewSaturationSlider').value = 0;
+                    break;
+            }
+            updatePreviewAdjustments();
+        }
+        
+        function displayPreviewPhoto() {
+            if (currentPreviewPhoto) {
+                displayPhoto(currentPreviewPhoto);
+                closePreviewModal();
+            }
+        }
+        
+        function openCropFromPreview() {
+            if (currentPreviewPhoto) {
+                // Store the photo name before closing the modal (which sets currentPreviewPhoto to null)
+                const photoToEdit = currentPreviewPhoto;
+                closePreviewModal();
+                
+                // Create a File object from the current photo to open in crop modal
+                fetch(`/photos/${photoToEdit}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`Failed to load image: ${response.status} ${response.statusText}`);
+                        }
+                        return response.blob();
+                    })
+                    .then(blob => {
+                        // Determine the correct MIME type from the file extension
+                        const extension = photoToEdit.split('.').pop().toLowerCase();
+                        let mimeType = blob.type;
+                        if (!mimeType || mimeType === 'application/octet-stream') {
+                            switch(extension) {
+                                case 'jpg':
+                                case 'jpeg':
+                                    mimeType = 'image/jpeg';
+                                    break;
+                                case 'png':
+                                    mimeType = 'image/png';
+                                    break;
+                                case 'gif':
+                                    mimeType = 'image/gif';
+                                    break;
+                                case 'bmp':
+                                    mimeType = 'image/bmp';
+                                    break;
+                                default:
+                                    mimeType = 'image/jpeg';
+                            }
+                        }
+                        
+                        const file = new File([blob], photoToEdit, { type: mimeType });
+                        currentFile = file;
+                        openCropModal(file);
+                    })
+                    .catch(err => {
+                        console.error('Error loading image for editing:', err);
+                        showToast(`Error loading image for editing: ${err.message}`, 'error');
+                        // Re-open preview modal if there was an error
+                        setTimeout(() => openPreviewModal(photoToEdit), 100);
+                    });
+            }
+        }
+        
+        async function saveAdjustedPreview() {
+            if (!currentPreviewPhoto || !hasPreviewAdjustments) return;
+            
+            try {
+                // Create a canvas to apply adjustments
+                const img = new Image();
+                
+                await new Promise((resolve, reject) => {
+                    img.onload = resolve;
+                    img.onerror = reject;
+                    img.src = `/photos/${currentPreviewPhoto}`;
+                });
+                
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                const ctx = canvas.getContext('2d');
+                
+                // Apply adjustments
+                ctx.filter = `brightness(${previewAdjustments.brightness}%) contrast(${previewAdjustments.contrast}%) saturate(${previewAdjustments.saturation}%)`;
+                ctx.drawImage(img, 0, 0);
+                
+                const imageData = canvas.toDataURL('image/png');
+                
+                const response = await fetch('/api/photos/upload-cropped', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image: imageData,
+                        filename: `${currentPreviewPhoto.split('.')[0]}_adjusted`
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    showToast('Adjusted photo saved successfully!');
+                    closePreviewModal();
+                    location.reload();
+                } else {
+                    showToast(result.error || 'Save failed', 'error');
+                }
+            } catch (err) {
+                showToast('Error saving adjusted photo: ' + err.message, 'error');
+            }
         }
     </script>
 </body>
