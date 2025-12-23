@@ -21,6 +21,7 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
 # Paths
 DATA_DIR = Path(os.environ.get('DATA_DIR', '/app/data'))
 PHOTOS_DIR = DATA_DIR / 'photos'
+ORIGINALS_DIR = DATA_DIR / 'originals'
 CONFIG_FILE = DATA_DIR / 'config.json'
 
 # Display settings for Inky Impression 7.3"
@@ -29,6 +30,7 @@ DISPLAY_HEIGHT = 480
 
 # Ensure directories exist
 PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
+ORIGINALS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Global state
 display_thread = None
@@ -230,8 +232,15 @@ def api_upload():
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     filename = f"{name}_{timestamp}{ext}"
     
-    filepath = PHOTOS_DIR / filename
-    file.save(filepath)
+    # Save original to originals directory
+    original_filepath = ORIGINALS_DIR / filename
+    file.save(original_filepath)
+    
+    # Also save a copy to photos directory for immediate display
+    display_filepath = PHOTOS_DIR / filename
+    with open(original_filepath, 'rb') as src:
+        with open(display_filepath, 'wb') as dst:
+            dst.write(src.read())
     
     return jsonify({'name': filename, 'success': True})
 
@@ -250,23 +259,46 @@ def api_upload_cropped():
     image_bytes = base64.b64decode(image_data)
     img = Image.open(io.BytesIO(image_bytes))
     
+    # Use original filename or create new one if cropping a fresh upload
     filename = data.get('filename', 'cropped')
-    name, ext = os.path.splitext(filename)
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    filename = f"{secure_filename(name)}_{timestamp}.png"
     
-    filepath = PHOTOS_DIR / filename
+    # If this is from an existing photo (re-cropping), use the same filename
+    # If this is a new upload being cropped, generate timestamped name
+    if data.get('is_recrop', False):
+        # Re-cropping existing photo - use exact filename to overwrite
+        final_filename = filename
+    else:
+        # New upload being cropped - generate timestamped name
+        name, ext = os.path.splitext(filename)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        final_filename = f"{secure_filename(name)}_{timestamp}.png"
+    
+    filepath = PHOTOS_DIR / final_filename
     img.save(filepath, 'PNG')
     
-    return jsonify({'name': filename, 'success': True})
+    return jsonify({'name': final_filename, 'success': True})
 
 
 @app.route('/api/photos/<filename>', methods=['DELETE'])
 def api_delete_photo(filename):
     """Delete a photo."""
-    filepath = PHOTOS_DIR / secure_filename(filename)
-    if filepath.exists():
-        filepath.unlink()
+    secure_name = secure_filename(filename)
+    display_filepath = PHOTOS_DIR / secure_name
+    original_filepath = ORIGINALS_DIR / secure_name
+    
+    deleted_any = False
+    
+    # Delete display version
+    if display_filepath.exists():
+        display_filepath.unlink()
+        deleted_any = True
+    
+    # Delete original version  
+    if original_filepath.exists():
+        original_filepath.unlink()
+        deleted_any = True
+    
+    if deleted_any:
         return jsonify({'success': True})
     return jsonify({'error': 'File not found'}), 404
 
@@ -290,6 +322,12 @@ def api_display_photo(filename):
 def serve_photo(filename):
     """Serve a photo file."""
     return send_from_directory(PHOTOS_DIR, filename)
+
+
+@app.route('/api/photos/original/<filename>')
+def serve_original_photo(filename):
+    """Serve an original photo file for editing."""
+    return send_from_directory(ORIGINALS_DIR, filename)
 
 
 @app.route('/api/preview/<filename>')

@@ -894,6 +894,7 @@
         let cropper = null;
         let currentFile = null;
         let cropOrientation = 'landscape'; // Track orientation for crop modal
+        let isRecrop = false; // Track if this is a re-crop operation
         
         // Image adjustment state
         let adjustments = {
@@ -980,13 +981,34 @@
             if (fileInput.files.length) handleFile(fileInput.files[0]);
         });
         
-        function handleFile(file) {
+        async function handleFile(file) {
             if (!file.type.startsWith('image/')) {
                 showToast('Please select an image file', 'error');
                 return;
             }
-            currentFile = file;
-            openCropModal(file);
+            
+            // First upload the original file to save both original and display versions
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const response = await fetch('/api/photos/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    // Now open crop modal with the uploaded filename for re-cropping
+                    currentFile = file;
+                    currentFile.uploadedFilename = result.name;
+                    openCropModal(file, false);
+                } else {
+                    showToast(result.error || 'Upload failed', 'error');
+                }
+            } catch (err) {
+                showToast('Upload failed: ' + err.message, 'error');
+            }
         }
         
         function setCropOrientation(orientation) {
@@ -1006,9 +1028,12 @@
             }
         }
         
-        function openCropModal(file) {
+        function openCropModal(file, isRecropOperation = false) {
             const modal = document.getElementById('cropModal');
             const cropImage = document.getElementById('cropImage');
+            
+            // Set the recrop flag
+            isRecrop = isRecropOperation;
             
             // Reset to landscape by default when opening
             cropOrientation = 'landscape';
@@ -1091,7 +1116,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         image: imageData,
-                        filename: currentFile?.name || 'photo'
+                        filename: currentFile?.uploadedFilename || currentFile?.name || 'photo',
+                        is_recrop: true  // Always true since original was already uploaded
                     })
                 });
                 
@@ -1322,11 +1348,11 @@
                 const photoToEdit = currentPreviewPhoto;
                 closePreviewModal();
                 
-                // Create a File object from the current photo to open in crop modal
-                fetch(`/photos/${photoToEdit}`)
+                // Create a File object from the ORIGINAL photo to open in crop modal
+                fetch(`/api/photos/original/${photoToEdit}`)
                     .then(response => {
                         if (!response.ok) {
-                            throw new Error(`Failed to load image: ${response.status} ${response.statusText}`);
+                            throw new Error(`Failed to load original image: ${response.status} ${response.statusText}`);
                         }
                         return response.blob();
                     })
@@ -1356,11 +1382,12 @@
                         
                         const file = new File([blob], photoToEdit, { type: mimeType });
                         currentFile = file;
-                        openCropModal(file);
+                        // Mark this as a re-crop operation so it overwrites the existing display version
+                        openCropModal(file, true);
                     })
                     .catch(err => {
-                        console.error('Error loading image for editing:', err);
-                        showToast(`Error loading image for editing: ${err.message}`, 'error');
+                        console.error('Error loading original image for editing:', err);
+                        showToast(`Error loading original image for editing: ${err.message}`, 'error');
                         // Re-open preview modal if there was an error
                         setTimeout(() => openPreviewModal(photoToEdit), 100);
                     });
@@ -1396,7 +1423,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         image: imageData,
-                        filename: `${currentPreviewPhoto.split('.')[0]}_adjusted`
+                        filename: currentPreviewPhoto,
+                        is_recrop: true
                     })
                 });
                 
