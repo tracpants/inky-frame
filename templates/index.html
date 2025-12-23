@@ -712,7 +712,7 @@
                     <div class="settings-group">
                         <label>Cycle interval</label>
                         <div class="interval-row">
-                            <input type="number" id="intervalValue" value="{{ (config.cycle_interval / 60)|int }}" min="1">
+                            <input type="number" id="intervalValue" value="{% if config.cycle_interval >= 3600 %}{{ (config.cycle_interval / 3600)|int }}{% else %}{{ (config.cycle_interval / 60)|int }}{% endif %}" min="1">
                             <select id="intervalUnit">
                                 <option value="60" {% if config.cycle_interval < 3600 %}selected{% endif %}>minutes</option>
                                 <option value="3600" {% if config.cycle_interval >= 3600 %}selected{% endif %}>hours</option>
