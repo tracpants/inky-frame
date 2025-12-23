@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libopenjp2-7 \
     libtiff6 \
     libatlas-base-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
