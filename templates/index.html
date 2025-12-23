@@ -659,6 +659,105 @@
                 max-height: 40vh;
             }
         }
+        
+        /* Widget Management Styles */
+        .widget-config {
+            margin-top: 16px;
+            padding: 16px;
+            background: var(--bg);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        
+        .widget-position-container {
+            display: flex;
+            gap: 16px;
+            align-items: flex-start;
+        }
+        
+        @media (max-width: 600px) {
+            .widget-position-container {
+                flex-direction: column;
+                gap: 12px;
+            }
+        }
+        
+        .position-grid {
+            flex-shrink: 0;
+        }
+        
+        .position-preview {
+            width: 120px;
+            height: 72px; /* 800x480 aspect ratio */
+            background: var(--surface-hover);
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            position: relative;
+            cursor: pointer;
+        }
+        
+        .position-marker {
+            width: 12px;
+            height: 8px;
+            background: var(--primary);
+            border-radius: 3px;
+            position: absolute;
+            top: 5%;
+            left: 5%;
+            transition: all 0.2s;
+        }
+        
+        .position-controls {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .position-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        
+        .position-row label {
+            min-width: 50px;
+            font-size: 0.85rem;
+            margin-bottom: 0;
+        }
+        
+        .position-row input[type="range"] {
+            flex: 1;
+            height: 6px;
+        }
+        
+        .widget-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+        }
+        
+        .widget-actions .btn {
+            flex: 1;
+        }
+        
+        /* Widget Preview Modal */
+        .widget-preview-modal .modal-content {
+            max-width: 1000px;
+        }
+        
+        .widget-preview-container {
+            background: var(--bg);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .widget-preview-container img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
     </style>
 </head>
 <body>
@@ -758,6 +857,79 @@
                     <button class="btn btn-primary" style="width: 100%;" onclick="saveSettings()">
                         Save Settings
                     </button>
+                </div>
+                
+                <div class="card">
+                    <h2>🎨 Display Widgets</h2>
+                    
+                    <div class="settings-group">
+                        <div class="toggle">
+                            <div class="toggle-switch" id="dateWidgetToggle"></div>
+                            <span>Date display</span>
+                        </div>
+                        <div class="widget-config" id="dateWidgetConfig" style="display: none;">
+                            <div class="settings-group" style="margin-bottom: 12px;">
+                                <label>Format</label>
+                                <select id="dateFormat">
+                                    <option value="%A, %B %d, %Y">Full (Monday, December 23, 2024)</option>
+                                    <option value="%b %d, %Y">Short (Dec 23, 2024)</option>
+                                    <option value="%m/%d/%Y">Numeric (12/23/2024)</option>
+                                    <option value="%Y-%m-%d">ISO (2024-12-23)</option>
+                                    <option value="%A">Day only (Monday)</option>
+                                    <option value="%B %d">Date only (December 23)</option>
+                                    <option value="%B %Y">Month/Year (December 2024)</option>
+                                </select>
+                            </div>
+                            
+                            <div class="settings-group" style="margin-bottom: 12px;">
+                                <label>Position</label>
+                                <div class="widget-position-container">
+                                    <div class="position-grid" id="datePositionGrid">
+                                        <div class="position-preview" id="datePositionPreview">
+                                            <div class="position-marker" id="datePositionMarker"></div>
+                                        </div>
+                                    </div>
+                                    <div class="position-controls">
+                                        <div class="position-row">
+                                            <label>X: <span id="dateXValue">5</span>%</label>
+                                            <input type="range" id="dateXSlider" min="0" max="95" value="5" oninput="updateDatePosition()">
+                                        </div>
+                                        <div class="position-row">
+                                            <label>Y: <span id="dateYValue">5</span>%</label>
+                                            <input type="range" id="dateYSlider" min="0" max="90" value="5" oninput="updateDatePosition()">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="settings-group" style="margin-bottom: 12px;">
+                                <label>Style</label>
+                                <select id="dateColorPreset" onchange="applyDateColorPreset()">
+                                    <option value="classic">Classic (White on Black)</option>
+                                    <option value="black_on_white">Black on White</option>
+                                    <option value="transparent">Transparent Background</option>
+                                    <option value="red_accent">Red Accent</option>
+                                </select>
+                            </div>
+                            
+                            <div class="settings-group">
+                                <label>Font Size</label>
+                                <div class="position-row">
+                                    <span id="dateFontSizeValue">24</span>px
+                                    <input type="range" id="dateFontSizeSlider" min="12" max="48" value="24" oninput="updateDateFontSize()">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="widget-actions">
+                        <button class="btn btn-secondary btn-sm" onclick="previewWidgets()">
+                            👁️ Preview
+                        </button>
+                        <button class="btn btn-primary" onclick="saveWidgetSettings()">
+                            Save Widgets
+                        </button>
+                    </div>
                 </div>
             </aside>
         </div>
@@ -883,6 +1055,28 @@
                 <button class="btn btn-secondary" onclick="openCropFromPreview()" id="editFurtherBtn">✂️ Edit Further</button>
                 <button class="btn btn-primary" onclick="saveAdjustedPreview()" id="saveAdjustedBtn" style="display: none;">💾 Save Adjusted</button>
                 <button class="btn btn-primary" onclick="displayPreviewPhoto()">📺 Display Now</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Widget Preview Modal -->
+    <div class="modal widget-preview-modal" id="widgetPreviewModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Widget Preview</h3>
+                <button class="btn btn-icon btn-secondary" onclick="closeWidgetPreviewModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="widget-preview-container">
+                    <img id="widgetPreviewImage" src="" alt="Widget preview">
+                </div>
+                <p style="text-align: center; color: var(--text-muted); margin-top: 12px; font-size: 0.9rem;">
+                    This shows how widgets will appear over your photos
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeWidgetPreviewModal()">Close</button>
+                <button class="btn btn-primary" onclick="saveWidgetSettings(); closeWidgetPreviewModal();">Save & Apply</button>
             </div>
         </div>
     </div>
@@ -1440,6 +1634,224 @@
                 showToast('Error saving adjusted photo: ' + err.message, 'error');
             }
         }
+        
+        // Widget Management Functions
+        let widgetConfig = {
+            date: {
+                enabled: false,
+                position: { x: 5, y: 5 },
+                style: {
+                    format: '%A, %B %d, %Y',
+                    font_size: 24,
+                    text_color: [255, 255, 255],
+                    bg_color: [0, 0, 0, 180],
+                    background: true,
+                    padding: 12
+                }
+            }
+        };
+        
+        function initializeWidgets() {
+            // Load current widget configuration
+            fetch('/api/widgets')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.current.date) {
+                        widgetConfig.date = data.current.date;
+                        updateWidgetUI();
+                    }
+                })
+                .catch(err => console.error('Failed to load widget config:', err));
+        }
+        
+        function updateWidgetUI() {
+            const dateConfig = widgetConfig.date;
+            
+            // Update toggle
+            const toggle = document.getElementById('dateWidgetToggle');
+            const configDiv = document.getElementById('dateWidgetConfig');
+            
+            if (dateConfig.enabled) {
+                toggle.classList.add('active');
+                configDiv.style.display = 'block';
+            } else {
+                toggle.classList.remove('active');
+                configDiv.style.display = 'none';
+            }
+            
+            // Update form fields
+            document.getElementById('dateFormat').value = dateConfig.style.format;
+            document.getElementById('dateXSlider').value = dateConfig.position.x;
+            document.getElementById('dateYSlider').value = dateConfig.position.y;
+            document.getElementById('dateFontSizeSlider').value = dateConfig.style.font_size;
+            
+            // Update display values
+            updateDatePosition();
+            updateDateFontSize();
+            
+            // Update color preset - find matching preset
+            const colorPresets = {
+                'classic': { text_color: [255, 255, 255], bg_color: [0, 0, 0, 180], background: true },
+                'black_on_white': { text_color: [0, 0, 0], bg_color: [255, 255, 255, 200], background: true },
+                'transparent': { text_color: [255, 255, 255], bg_color: [0, 0, 0, 0], background: false },
+                'red_accent': { text_color: [255, 255, 255], bg_color: [200, 50, 50, 180], background: true }
+            };
+            
+            for (const [presetName, preset] of Object.entries(colorPresets)) {
+                if (JSON.stringify(preset.text_color) === JSON.stringify(dateConfig.style.text_color) &&
+                    JSON.stringify(preset.bg_color) === JSON.stringify(dateConfig.style.bg_color) &&
+                    preset.background === dateConfig.style.background) {
+                    document.getElementById('dateColorPreset').value = presetName;
+                    break;
+                }
+            }
+        }
+        
+        function updateDatePosition() {
+            const x = document.getElementById('dateXSlider').value;
+            const y = document.getElementById('dateYSlider').value;
+            
+            document.getElementById('dateXValue').textContent = x;
+            document.getElementById('dateYValue').textContent = y;
+            
+            // Update visual marker
+            const marker = document.getElementById('datePositionMarker');
+            marker.style.left = x + '%';
+            marker.style.top = y + '%';
+            
+            // Update config
+            widgetConfig.date.position.x = parseInt(x);
+            widgetConfig.date.position.y = parseInt(y);
+        }
+        
+        function updateDateFontSize() {
+            const size = document.getElementById('dateFontSizeSlider').value;
+            document.getElementById('dateFontSizeValue').textContent = size;
+            
+            // Update config
+            widgetConfig.date.style.font_size = parseInt(size);
+        }
+        
+        function applyDateColorPreset() {
+            const preset = document.getElementById('dateColorPreset').value;
+            const colorPresets = {
+                'classic': { text_color: [255, 255, 255], bg_color: [0, 0, 0, 180], background: true },
+                'black_on_white': { text_color: [0, 0, 0], bg_color: [255, 255, 255, 200], background: true },
+                'transparent': { text_color: [255, 255, 255], bg_color: [0, 0, 0, 0], background: false },
+                'red_accent': { text_color: [255, 255, 255], bg_color: [200, 50, 50, 180], background: true }
+            };
+            
+            if (colorPresets[preset]) {
+                Object.assign(widgetConfig.date.style, colorPresets[preset]);
+            }
+        }
+        
+        async function previewWidgets() {
+            try {
+                // Get current photo for preview
+                const photos = document.querySelectorAll('.photo-card');
+                let currentPhoto = null;
+                
+                // Find current photo or use first available
+                for (const photo of photos) {
+                    if (photo.classList.contains('current')) {
+                        currentPhoto = photo.dataset.name;
+                        break;
+                    }
+                }
+                
+                if (!currentPhoto && photos.length > 0) {
+                    currentPhoto = photos[0].dataset.name;
+                }
+                
+                // Update widget config from UI
+                updateConfigFromUI();
+                
+                const response = await fetch('/api/widgets/preview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        photo: currentPhoto,
+                        widgets: widgetConfig,
+                        orientation: document.getElementById('orientationSelect').value
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.preview) {
+                    document.getElementById('widgetPreviewImage').src = result.preview;
+                    document.getElementById('widgetPreviewModal').classList.add('active');
+                } else {
+                    showToast('Preview generation failed', 'error');
+                }
+            } catch (err) {
+                showToast('Error generating preview: ' + err.message, 'error');
+            }
+        }
+        
+        function updateConfigFromUI() {
+            // Update date widget config from form
+            widgetConfig.date.style.format = document.getElementById('dateFormat').value;
+            applyDateColorPreset();
+        }
+        
+        function closeWidgetPreviewModal() {
+            document.getElementById('widgetPreviewModal').classList.remove('active');
+        }
+        
+        async function saveWidgetSettings() {
+            try {
+                updateConfigFromUI();
+                
+                // Save date widget config
+                const response = await fetch('/api/widgets/date', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(widgetConfig.date)
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    showToast('Widget settings saved!');
+                } else {
+                    showToast('Error saving widget settings', 'error');
+                }
+            } catch (err) {
+                showToast('Error saving widget settings: ' + err.message, 'error');
+            }
+        }
+        
+        // Initialize widget management
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set up date widget toggle
+            const dateToggle = document.getElementById('dateWidgetToggle');
+            dateToggle.addEventListener('click', () => {
+                dateToggle.classList.toggle('active');
+                widgetConfig.date.enabled = dateToggle.classList.contains('active');
+                
+                const configDiv = document.getElementById('dateWidgetConfig');
+                configDiv.style.display = widgetConfig.date.enabled ? 'block' : 'none';
+            });
+            
+            // Set up position preview click
+            const positionPreview = document.getElementById('datePositionPreview');
+            positionPreview.addEventListener('click', (e) => {
+                const rect = positionPreview.getBoundingClientRect();
+                const x = ((e.clientX - rect.left) / rect.width) * 100;
+                const y = ((e.clientY - rect.top) / rect.height) * 100;
+                
+                // Clamp values
+                const clampedX = Math.max(0, Math.min(95, x));
+                const clampedY = Math.max(0, Math.min(90, y));
+                
+                document.getElementById('dateXSlider').value = clampedX;
+                document.getElementById('dateYSlider').value = clampedY;
+                updateDatePosition();
+            });
+            
+            // Initialize widgets
+            initializeWidgets();
+        });
     </script>
 </body>
 </html>

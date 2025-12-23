@@ -15,6 +15,10 @@ from PIL import Image
 import io
 import base64
 
+# Import widget system
+from widgets import get_widget, get_available_widgets, WIDGET_REGISTRY
+from widgets.date_widget import DateWidget
+
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
 
@@ -45,6 +49,20 @@ def load_config():
         'current_photo': None,
         'orientation': 'landscape',  # landscape or portrait
         'photo_order': [],
+        'widgets': {
+            'date': {
+                'enabled': False,
+                'position': {'x': 5, 'y': 5},
+                'style': {
+                    'format': '%A, %B %d, %Y',
+                    'font_size': 24,
+                    'text_color': [255, 255, 255],
+                    'bg_color': [0, 0, 0, 180],
+                    'background': True,
+                    'padding': 12
+                }
+            }
+        }
     }
     if CONFIG_FILE.exists():
         try:
@@ -81,6 +99,107 @@ def get_photos():
     return sorted(photos, key=lambda x: x.stat().st_mtime, reverse=True)
 
 
+def render_widgets(image, display_width, display_height, orientation='landscape'):
+    """
+    Render all enabled widgets and overlay them on the image.
+    
+    Args:
+        image: PIL Image to overlay widgets on
+        display_width: Width of the display
+        display_height: Height of the display
+        orientation: Current display orientation
+        
+    Returns:
+        PIL Image with widgets overlaid
+    """
+    config = load_config()
+    widgets_config = config.get('widgets', {})
+    
+    # Convert to RGBA for proper alpha blending
+    if image.mode != 'RGBA':
+        image = image.convert('RGBA')
+    
+    for widget_type, widget_config in widgets_config.items():
+        if not widget_config.get('enabled', False):
+            continue
+        
+        # Get widget class
+        widget_class = get_widget(widget_type)
+        if not widget_class:
+            print(f"Warning: Unknown widget type '{widget_type}'")
+            continue
+        
+        # Update widget config with current orientation
+        widget_config = widget_config.copy()
+        widget_config['orientation'] = orientation
+        
+        try:
+            # Create widget instance and render
+            widget = widget_class(widget_config)
+            widget_img = widget.render(display_width, display_height)
+            
+            if widget_img:
+                # Get position for this widget
+                x, y = widget.get_position_pixels(display_width, display_height)
+                
+                # Ensure widget doesn't go off-screen
+                max_x = display_width - widget_img.width
+                max_y = display_height - widget_img.height
+                x = max(0, min(x, max_x))
+                y = max(0, min(y, max_y))
+                
+                # Paste widget onto image with alpha blending
+                image.paste(widget_img, (x, y), widget_img)
+                
+        except Exception as e:
+            print(f"Error rendering widget '{widget_type}': {e}")
+    
+    return image
+
+
+def prepare_display_image(photo_path):
+    """
+    Prepare an image for display, including widget overlays.
+    
+    Args:
+        photo_path: Path to the photo file
+        
+    Returns:
+        PIL Image ready for display
+    """
+    config = load_config()
+    orientation = config.get('orientation', 'landscape')
+    
+    # Load and prepare the base image
+    img = Image.open(photo_path)
+    img_width, img_height = img.size
+    
+    # Detect if image is portrait (taller than wide)
+    is_portrait = img_height > img_width
+    
+    if is_portrait:
+        # Rotate portrait image 90° CCW so it displays correctly
+        img = img.rotate(90, expand=True)
+    
+    # Get display dimensions
+    display_width, display_height = get_display_dimensions(orientation)
+    
+    # Resize to fit display dimensions
+    img = img.resize((display_width, display_height), Image.Resampling.LANCZOS)
+    
+    # Overlay widgets
+    img = render_widgets(img, display_width, display_height, orientation)
+    
+    # Convert back to RGB if needed for e-ink display
+    if img.mode == 'RGBA':
+        # Create white background and paste RGBA image
+        rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+        rgb_img.paste(img, (0, 0), img)
+        img = rgb_img
+    
+    return img
+
+
 def display_photo(photo_path):
     """Display a photo on the Inky Impression."""
     try:
@@ -88,19 +207,12 @@ def display_photo(photo_path):
         
         inky_display = auto()
         
-        img = Image.open(photo_path)
-        img_width, img_height = img.size
+        # Use the new image preparation function that includes widgets
+        img = prepare_display_image(photo_path)
         
-        # Detect if image is portrait (taller than wide)
-        is_portrait = img_height > img_width
-        
-        if is_portrait:
-            # Rotate portrait image 90° CCW so it displays correctly
-            # when the display is physically rotated to portrait orientation
-            img = img.rotate(90, expand=True)
-        
-        # Now resize to fit display's native dimensions
-        img = img.resize((inky_display.width, inky_display.height), Image.Resampling.LANCZOS)
+        # Ensure image matches display dimensions
+        if img.size != (inky_display.width, inky_display.height):
+            img = img.resize((inky_display.width, inky_display.height), Image.Resampling.LANCZOS)
         
         if hasattr(inky_display, 'set_image'):
             inky_display.set_image(img)
@@ -324,6 +436,27 @@ def serve_photo(filename):
     return send_from_directory(PHOTOS_DIR, filename)
 
 
+@app.route('/photos/<filename>/with-widgets')
+def serve_photo_with_widgets(filename):
+    """Serve a photo with widgets overlaid."""
+    filepath = PHOTOS_DIR / secure_filename(filename)
+    if not filepath.exists():
+        return jsonify({'error': 'File not found'}), 404
+    
+    try:
+        # Prepare image with widgets
+        img = prepare_display_image(filepath)
+        
+        # Convert to base64 for serving
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        
+        return buffer.getvalue(), 200, {'Content-Type': 'image/png'}
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to render image with widgets: {str(e)}'}), 500
+
+
 @app.route('/api/photos/original/<filename>')
 def serve_original_photo(filename):
     """Serve an original photo file for editing."""
@@ -345,6 +478,163 @@ def api_preview(filename):
     b64 = base64.b64encode(buffer.getvalue()).decode()
     
     return jsonify({'thumbnail': f'data:image/png;base64,{b64}'})
+
+
+@app.route('/api/widgets', methods=['GET'])
+def api_widgets_list():
+    """Get list of available widgets and their configuration."""
+    config = load_config()
+    widgets_config = config.get('widgets', {})
+    
+    # Get available widget types
+    available_widgets = {}
+    for widget_type in get_available_widgets():
+        widget_class = get_widget(widget_type)
+        if widget_class:
+            available_widgets[widget_type] = {
+                'name': widget_type.title(),
+                'default_config': widget_class({}).get_default_config()
+            }
+    
+    return jsonify({
+        'current': widgets_config,
+        'available': available_widgets
+    })
+
+
+@app.route('/api/widgets/<widget_type>', methods=['GET', 'POST'])
+def api_widget_config(widget_type):
+    """Get or update specific widget configuration."""
+    if request.method == 'GET':
+        config = load_config()
+        widget_config = config.get('widgets', {}).get(widget_type, {})
+        return jsonify(widget_config)
+    
+    # POST - Update widget configuration
+    config = load_config()
+    if 'widgets' not in config:
+        config['widgets'] = {}
+    
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No configuration provided'}), 400
+    
+    # Validate widget type exists
+    widget_class = get_widget(widget_type)
+    if not widget_class:
+        return jsonify({'error': f'Unknown widget type: {widget_type}'}), 400
+    
+    # Update configuration
+    config['widgets'][widget_type] = data
+    save_config(config)
+    
+    return jsonify({'success': True, 'config': data})
+
+
+@app.route('/api/widgets/<widget_type>/options', methods=['GET'])
+def api_widget_options(widget_type):
+    """Get available options for a specific widget type."""
+    widget_class = get_widget(widget_type)
+    if not widget_class:
+        return jsonify({'error': f'Unknown widget type: {widget_type}'}), 404
+    
+    options = {}
+    widget_instance = widget_class({})
+    
+    # Get format options if available (for date widget)
+    if hasattr(widget_instance, 'get_format_options'):
+        options['formats'] = widget_instance.get_format_options()
+    
+    # Get color presets if available
+    if hasattr(widget_instance, 'get_color_presets'):
+        options['color_presets'] = widget_instance.get_color_presets()
+    
+    return jsonify(options)
+
+
+@app.route('/api/widgets/preview', methods=['POST'])
+def api_widget_preview():
+    """Generate a preview of widgets overlaid on a photo."""
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    photo_filename = data.get('photo')
+    widget_configs = data.get('widgets', {})
+    orientation = data.get('orientation', 'landscape')
+    
+    # Get photo path
+    if photo_filename:
+        photo_path = PHOTOS_DIR / secure_filename(photo_filename)
+        if not photo_path.exists():
+            return jsonify({'error': 'Photo not found'}), 404
+    else:
+        # Use first available photo for preview
+        photos = get_photos()
+        if not photos:
+            return jsonify({'error': 'No photos available for preview'}), 404
+        photo_path = photos[0]
+    
+    try:
+        # Load and prepare base image
+        img = Image.open(photo_path)
+        display_width, display_height = get_display_dimensions(orientation)
+        
+        # Detect if image is portrait and rotate if needed
+        img_width, img_height = img.size
+        is_portrait = img_height > img_width
+        if is_portrait:
+            img = img.rotate(90, expand=True)
+        
+        # Resize to display dimensions
+        img = img.resize((display_width, display_height), Image.Resampling.LANCZOS)
+        
+        # Convert to RGBA for widget overlay
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+        
+        # Render widgets with temporary configuration
+        for widget_type, widget_config in widget_configs.items():
+            widget_class = get_widget(widget_type)
+            if not widget_class or not widget_config.get('enabled', False):
+                continue
+            
+            # Update widget config with orientation
+            widget_config = widget_config.copy()
+            widget_config['orientation'] = orientation
+            
+            try:
+                widget = widget_class(widget_config)
+                widget_img = widget.render(display_width, display_height)
+                
+                if widget_img:
+                    x, y = widget.get_position_pixels(display_width, display_height)
+                    
+                    # Ensure widget stays on screen
+                    max_x = display_width - widget_img.width
+                    max_y = display_height - widget_img.height
+                    x = max(0, min(x, max_x))
+                    y = max(0, min(y, max_y))
+                    
+                    img.paste(widget_img, (x, y), widget_img)
+            except Exception as e:
+                print(f"Error rendering preview widget '{widget_type}': {e}")
+        
+        # Convert to RGB for output
+        if img.mode == 'RGBA':
+            rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+            rgb_img.paste(img, (0, 0), img)
+            img = rgb_img
+        
+        # Convert to base64 for response
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        b64 = base64.b64encode(buffer.getvalue()).decode()
+        
+        return jsonify({'preview': f'data:image/png;base64,{b64}'})
+        
+    except Exception as e:
+        return jsonify({'error': f'Preview generation failed: {str(e)}'}), 500
 
 
 if __name__ == '__main__':
