@@ -52,14 +52,11 @@ def load_config():
         'widgets': {
             'date': {
                 'enabled': False,
-                'position': {'x': 5, 'y': 5},
+                'position': {
+                    'preset': 'bottom_right'
+                },
                 'style': {
-                    'format': '%A, %B %d, %Y',
-                    'font_size': 24,
-                    'text_color': [255, 255, 255],
-                    'bg_color': [0, 0, 0, 180],
-                    'background': True,
-                    'padding': 12
+                    'style': 'classic'
                 }
             }
         }
