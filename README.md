@@ -116,6 +116,17 @@ inky-frame/
 └── requirements-pi.txt     # Pi-specific dependencies
 ```
 
+## Development
+
+Run the test suite locally (no hardware or Docker needed):
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+Tests run against a temporary data directory, so they never touch real photos. The same suite plus a Docker build runs in GitHub Actions on every push and pull request.
+
 ## License
 
 MIT
