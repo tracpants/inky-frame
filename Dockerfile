@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application
 COPY app.py .
 COPY templates/ templates/
+COPY widgets/ widgets/
 
 # Create data directory
 RUN mkdir -p /app/data/photos
@@ -30,6 +31,7 @@ EXPOSE 5000
 # Environment
 ENV FLASK_APP=app.py
 ENV DATA_DIR=/app/data
+ENV PYTHONPATH=/app
 
-# Run with gunicorn for production
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "4", "app:app"]
+# Default to Flask for development, can be overridden for production
+CMD ["python", "app.py"]
