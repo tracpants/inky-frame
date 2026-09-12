@@ -30,6 +30,13 @@ docker compose up
 ```
 Runs without hardware dependencies - displays "dev mode" messages when attempting display updates.
 
+### Tests
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
+Tests live in `tests/` and run the Flask app against a temporary `DATA_DIR`. CI (`.github/workflows/ci.yml`) runs them plus a Docker build on every push and PR.
+
 ### Raspberry Pi Deployment
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d

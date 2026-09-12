@@ -8,6 +8,16 @@ from PIL import Image, ImageDraw, ImageFont
 from typing import Dict, Any, Tuple, Optional
 import os
 
+# TrueType fonts to try, in order. INKY_FONT overrides them all.
+FONT_CANDIDATES = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/System/Library/Fonts/Helvetica.ttc",
+    "C:/Windows/Fonts/arialbd.ttf",
+]
+
 
 class BaseWidget(ABC):
     """Base class for all display widgets."""
@@ -77,7 +87,11 @@ class BaseWidget(ABC):
     
     def load_font(self, size: int = 20) -> ImageFont.ImageFont:
         """
-        Load a font for text rendering.
+        Load a font for text rendering at the requested pixel size.
+        
+        Tries INKY_FONT, then common system TrueType fonts, and finally
+        Pillow's built-in font scaled to the requested size, so the widget
+        is readable on the panel regardless of which fonts are installed.
         
         Args:
             size: Font size in pixels
@@ -85,16 +99,18 @@ class BaseWidget(ABC):
         Returns:
             PIL ImageFont object
         """
-        try:
-            # Try to load a nice system font
-            return ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", size)
-        except (OSError, IOError):
+        candidates = [os.environ.get('INKY_FONT')] + FONT_CANDIDATES
+        for path in candidates:
+            if not path:
+                continue
             try:
-                # Fallback to default font
-                return ImageFont.load_default()
-            except Exception:
-                # Ultimate fallback
-                return ImageFont.load_default()
+                return ImageFont.truetype(path, size)
+            except (OSError, IOError):
+                continue
+        try:
+            return ImageFont.load_default(size)  # Pillow >= 10.1 scales it
+        except TypeError:
+            return ImageFont.load_default()
     
     def create_text_background(self, text: str, font: ImageFont.ImageFont, 
                              padding: int = 10, bg_color: Tuple[int, int, int, int] = (0, 0, 0, 128)) -> Image.Image:
@@ -121,6 +137,24 @@ class BaseWidget(ABC):
         
         background = Image.new('RGBA', (bg_width, bg_height), bg_color)
         return background
+    
+    @classmethod
+    def normalize_config(cls, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate and normalise a configuration submitted via the API.
+        
+        Subclasses should override this to check their own options.
+        Raises ValueError with a user-readable message on invalid input.
+        """
+        position = data.get('position', {})
+        style = data.get('style', {})
+        if not isinstance(position, dict) or not isinstance(style, dict):
+            raise ValueError('position and style must be objects')
+        return {
+            'enabled': bool(data.get('enabled', False)),
+            'position': position,
+            'style': style,
+        }
     
     def update_config(self, new_config: Dict[str, Any]):
         """

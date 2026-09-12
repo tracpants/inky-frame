@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libopenjp2-7 \
     libtiff6 \
     libatlas-base-dev \
+    fonts-dejavu-core \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -33,5 +34,5 @@ ENV FLASK_APP=app.py
 ENV DATA_DIR=/app/data
 ENV PYTHONPATH=/app
 
-# Default to Flask for development, can be overridden for production
-CMD ["python", "app.py"]
+# Run with gunicorn. A single worker keeps exactly one photo-cycling thread.
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "4", "app:app"]

@@ -106,9 +106,10 @@ class DateWidget(BaseWidget):
                                  radius=max(4, int(font_size * 0.15)), 
                                  fill=bg_color)
         
-        # Draw text
-        text_x = padding
-        text_y = padding
+        # Draw text, offsetting by the glyph bounding box so it sits inside
+        # the padded background rather than hanging below it
+        text_x = padding - bbox[0]
+        text_y = padding - bbox[1]
         draw.text((text_x, text_y), date_text, fill=text_color, font=font)
         
         # Store widget dimensions for positioning calculations
@@ -186,6 +187,24 @@ class DateWidget(BaseWidget):
             'style': {
                 'style': 'classic'  # Use style preset instead of individual colors
             }
+        }
+    
+    @classmethod
+    def normalize_config(cls, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate a submitted config against the known presets and styles."""
+        base = super().normalize_config(data)
+        preset = base['position'].get('preset', 'bottom_right')
+        if preset not in cls.POSITIONS:
+            raise ValueError(f"Unknown position preset '{preset}'. "
+                             f"Choose one of: {', '.join(cls.POSITIONS)}")
+        style = base['style'].get('style', 'classic')
+        if style not in cls.STYLES:
+            raise ValueError(f"Unknown style '{style}'. "
+                             f"Choose one of: {', '.join(cls.STYLES)}")
+        return {
+            'enabled': base['enabled'],
+            'position': {'preset': preset},
+            'style': {'style': style},
         }
     
     def get_position_presets(self) -> Dict[str, str]:

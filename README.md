@@ -14,10 +14,10 @@ A web-based photo frame controller for the Pimoroni Inky Impression 7.3" e-ink d
 ### Widget System
 
 - **Modular Design** - Easy to add new widget types (weather, calendar, etc.)
-- **Date Widget** - Show current date in multiple formats with customizable styling
-- **Drag & Drop Positioning** - Visual positioning with click-to-place functionality
+- **Date Widget** - Show the current date ("Wed 24 Dec") with three style presets
+- **Preset Positioning** - Six corner and edge positions to choose from
 - **Live Preview** - See widgets overlaid on your photos before applying
-- **Orientation Aware** - Different widget positions for landscape vs portrait modes
+- **Orientation Aware** - Widgets stay upright on portrait photos when the frame is rotated
 
 ## Hardware Requirements
 
@@ -63,16 +63,6 @@ docker compose up
 
 The web UI will work without the display - you'll see "dev mode" messages when trying to update the display.
 
-### For Production Deployment
-
-```bash
-# With hardware (recommended)
-docker compose -f docker-compose.yml -f docker-compose.pi.yml -f docker-compose.prod.yml up -d
-
-# Development with gunicorn
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-```
-
 ## Configuration
 
 ### Display Settings
@@ -115,6 +105,8 @@ docker run --rm -v inky-data:/data -v $(pwd):/backup alpine tar czf /backup/inky
 | `/api/widgets/preview` | POST | Generate preview with widgets overlaid |
 | `/photos/<filename>/with-widgets` | GET | Serve photo with widgets overlaid |
 
+Set `INKY_FONT=/path/to/font.ttf` in the container environment to use a custom widget font. The images ship with DejaVu Sans.
+
 ## Display Notes
 
 - **Refresh time:** ~20-25 seconds per update
@@ -146,6 +138,17 @@ inky-frame/
 ├── requirements.txt        # Python dependencies
 └── requirements-pi.txt     # Pi-specific dependencies
 ```
+
+## Development
+
+Run the test suite locally (no hardware or Docker needed):
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+Tests run against a temporary data directory, so they never touch real photos. The same suite plus a Docker build runs in GitHub Actions on every push and pull request.
 
 ## License
 

@@ -11,13 +11,13 @@ from datetime import datetime
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 import io
 import base64
+import shutil
 
 # Import widget system
-from widgets import get_widget, get_available_widgets, WIDGET_REGISTRY
-from widgets.date_widget import DateWidget
+from widgets import get_widget, get_available_widgets
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
@@ -36,9 +36,18 @@ DISPLAY_HEIGHT = 480
 PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
 ORIGINALS_DIR.mkdir(parents=True, exist_ok=True)
 
+# Allowed upload types (must match what get_photos() lists)
+ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp'}
+
 # Global state
 display_thread = None
 stop_event = threading.Event()
+# Serialises read-modify-write cycles on config.json between request
+# handlers and the background cycle thread.
+config_lock = threading.RLock()
+# Set whenever cycling settings change so the cycle thread re-reads them
+# instead of sleeping out the old interval.
+settings_changed = threading.Event()
 
 
 def load_config():
@@ -75,9 +84,30 @@ def load_config():
 
 
 def save_config(config):
-    """Save configuration to file."""
-    with open(CONFIG_FILE, 'w') as f:
+    """Save configuration to file atomically so readers never see a partial file."""
+    tmp_file = CONFIG_FILE.with_suffix('.json.tmp')
+    with open(tmp_file, 'w') as f:
         json.dump(config, f, indent=2)
+    os.replace(tmp_file, CONFIG_FILE)
+
+
+def update_config(**changes):
+    """Atomically apply changes to the stored config and return it."""
+    with config_lock:
+        config = load_config()
+        config.update(changes)
+        save_config(config)
+        return config
+
+
+def is_valid_image(data):
+    """Return True if the bytes decode as an image Pillow can open."""
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            img.verify()
+        return True
+    except (UnidentifiedImageError, OSError, ValueError):
+        return False
 
 
 def get_display_dimensions(orientation):
@@ -96,28 +126,30 @@ def get_photos():
     return sorted(photos, key=lambda x: x.stat().st_mtime, reverse=True)
 
 
-def render_widgets(image, display_width, display_height, orientation='landscape'):
+def render_widgets(image, display_width, display_height, orientation='landscape',
+                   widgets_config=None):
     """
     Render all enabled widgets and overlay them on the image.
     
     Args:
-        image: PIL Image to overlay widgets on
-        display_width: Width of the display
-        display_height: Height of the display
-        orientation: Current display orientation
+        image: PIL Image to overlay widgets on (its upright canvas)
+        display_width: Width of the canvas
+        display_height: Height of the canvas
+        orientation: 'landscape' or 'portrait' canvas
+        widgets_config: widget config mapping; defaults to the saved config
         
     Returns:
         PIL Image with widgets overlaid
     """
-    config = load_config()
-    widgets_config = config.get('widgets', {})
+    if widgets_config is None:
+        widgets_config = load_config().get('widgets', {})
     
     # Convert to RGBA for proper alpha blending
     if image.mode != 'RGBA':
         image = image.convert('RGBA')
     
     for widget_type, widget_config in widgets_config.items():
-        if not widget_config.get('enabled', False):
+        if not isinstance(widget_config, dict) or not widget_config.get('enabled', False):
             continue
         
         # Get widget class
@@ -127,7 +159,7 @@ def render_widgets(image, display_width, display_height, orientation='landscape'
             continue
         
         # Update widget config with current orientation
-        widget_config = widget_config.copy()
+        widget_config = dict(widget_config)
         widget_config['orientation'] = orientation
         
         try:
@@ -154,45 +186,57 @@ def render_widgets(image, display_width, display_height, orientation='landscape'
     return image
 
 
+def compose_photo(photo_path, widgets_config=None):
+    """
+    Load a photo, fit it to its upright display canvas and overlay widgets.
+    
+    Portrait photos (taller than wide) use a 480x800 canvas and landscape
+    photos an 800x480 one, so widget text is always drawn upright relative
+    to the photo. display_photo() rotates portrait results to the panel.
+    
+    Args:
+        photo_path: Path to the photo file
+        widgets_config: widget config mapping; defaults to the saved config
+        
+    Returns:
+        (RGB PIL Image, is_portrait)
+    """
+    with Image.open(photo_path) as src:
+        img = src.convert('RGB')
+    
+    is_portrait = img.height > img.width
+    orientation = 'portrait' if is_portrait else 'landscape'
+    display_width, display_height = get_display_dimensions(orientation)
+    
+    img = img.resize((display_width, display_height), Image.Resampling.LANCZOS)
+    img = render_widgets(img, display_width, display_height, orientation, widgets_config)
+    
+    # Flatten alpha for the e-ink driver and PNG output
+    if img.mode == 'RGBA':
+        rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+        rgb_img.paste(img, (0, 0), img)
+        img = rgb_img
+    
+    return img, is_portrait
+
+
 def prepare_display_image(photo_path):
     """
-    Prepare an image for display, including widget overlays.
+    Prepare an image for the panel: widgets overlaid and rotated to the
+    display's native landscape dimensions.
     
     Args:
         photo_path: Path to the photo file
         
     Returns:
-        PIL Image ready for display
+        PIL Image sized DISPLAY_WIDTH x DISPLAY_HEIGHT
     """
-    config = load_config()
-    orientation = config.get('orientation', 'landscape')
-    
-    # Load and prepare the base image
-    img = Image.open(photo_path)
-    img_width, img_height = img.size
-    
-    # Detect if image is portrait (taller than wide)
-    is_portrait = img_height > img_width
+    img, is_portrait = compose_photo(photo_path)
     
     if is_portrait:
         # Rotate portrait image 90° CCW so it displays correctly
+        # when the display is physically rotated to portrait orientation
         img = img.rotate(90, expand=True)
-    
-    # Get display dimensions
-    display_width, display_height = get_display_dimensions(orientation)
-    
-    # Resize to fit display dimensions
-    img = img.resize((display_width, display_height), Image.Resampling.LANCZOS)
-    
-    # Overlay widgets
-    img = render_widgets(img, display_width, display_height, orientation)
-    
-    # Convert back to RGB if needed for e-ink display
-    if img.mode == 'RGBA':
-        # Create white background and paste RGBA image
-        rgb_img = Image.new('RGB', img.size, (255, 255, 255))
-        rgb_img.paste(img, (0, 0), img)
-        img = rgb_img
     
     return img
 
@@ -258,15 +302,27 @@ def cycle_photos():
             photo_index = 0
         
         current_photo = photos[photo_index]
-        config['current_photo'] = current_photo.name
-        save_config(config)
+        update_config(current_photo=current_photo.name)
         
+        displayed_at = time.monotonic()
         display_photo(current_photo)
         
         photo_index += 1
         
-        interval = config.get('cycle_interval', 3600)
-        stop_event.wait(timeout=interval)
+        # Sleep until the next change, but wake early if the interval is
+        # changed or cycling is disabled so new settings apply immediately.
+        settings_changed.clear()
+        deadline = displayed_at + config.get('cycle_interval', 3600)
+        while not stop_event.is_set():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            if settings_changed.wait(timeout=min(remaining, 1.0)):
+                settings_changed.clear()
+                config = load_config()
+                if not config.get('cycle_enabled'):
+                    break
+                deadline = displayed_at + config.get('cycle_interval', 3600)
 
 
 def start_cycle_thread():
@@ -299,19 +355,30 @@ def api_config():
     if request.method == 'GET':
         return jsonify(load_config())
     
-    config = load_config()
-    data = request.json
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Expected a JSON object'}), 400
     
+    changes = {}
     if 'cycle_enabled' in data:
-        config['cycle_enabled'] = bool(data['cycle_enabled'])
+        changes['cycle_enabled'] = bool(data['cycle_enabled'])
     if 'cycle_interval' in data:
-        config['cycle_interval'] = max(60, int(data['cycle_interval']))
+        try:
+            changes['cycle_interval'] = max(60, int(data['cycle_interval']))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'cycle_interval must be a number of seconds'}), 400
     if 'orientation' in data:
-        config['orientation'] = data['orientation']
+        if data['orientation'] not in ('landscape', 'portrait'):
+            return jsonify({'error': "orientation must be 'landscape' or 'portrait'"}), 400
+        changes['orientation'] = data['orientation']
     if 'photo_order' in data:
-        config['photo_order'] = data['photo_order']
+        if not isinstance(data['photo_order'], list):
+            return jsonify({'error': 'photo_order must be a list of filenames'}), 400
+        changes['photo_order'] = [secure_filename(str(n)) for n in data['photo_order']]
     
-    save_config(config)
+    config = update_config(**changes)
+    if 'cycle_enabled' in changes or 'cycle_interval' in changes:
+        settings_changed.set()
     return jsonify(config)
 
 
@@ -338,18 +405,23 @@ def api_upload():
     
     filename = secure_filename(file.filename)
     name, ext = os.path.splitext(filename)
+    if ext.lower() not in ALLOWED_EXTENSIONS:
+        return jsonify({'error': 'Unsupported file type. Use JPG, PNG, GIF or BMP.'}), 400
+    
+    data = file.read()
+    if not is_valid_image(data):
+        return jsonify({'error': 'File is not a valid image'}), 400
+    
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    filename = f"{name}_{timestamp}{ext}"
+    filename = f"{name}_{timestamp}{ext.lower()}"
     
     # Save original to originals directory
     original_filepath = ORIGINALS_DIR / filename
-    file.save(original_filepath)
+    with open(original_filepath, 'wb') as f:
+        f.write(data)
     
     # Also save a copy to photos directory for immediate display
-    display_filepath = PHOTOS_DIR / filename
-    with open(original_filepath, 'rb') as src:
-        with open(display_filepath, 'wb') as dst:
-            dst.write(src.read())
+    shutil.copyfile(original_filepath, PHOTOS_DIR / filename)
     
     return jsonify({'name': filename, 'success': True})
 
@@ -357,25 +429,33 @@ def api_upload():
 @app.route('/api/photos/upload-cropped', methods=['POST'])
 def api_upload_cropped():
     """Upload a cropped photo from the crop tool."""
-    data = request.json
-    if not data or 'image' not in data:
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data.get('image'), str):
         return jsonify({'error': 'No image data provided'}), 400
     
     image_data = data['image']
     if ',' in image_data:
         image_data = image_data.split(',')[1]
     
-    image_bytes = base64.b64decode(image_data)
-    img = Image.open(io.BytesIO(image_bytes))
+    try:
+        image_bytes = base64.b64decode(image_data, validate=True)
+        img = Image.open(io.BytesIO(image_bytes))
+        img.load()
+    except (ValueError, UnidentifiedImageError, OSError):
+        return jsonify({'error': 'Image data is not a valid base64-encoded image'}), 400
     
     # Use original filename or create new one if cropping a fresh upload
-    filename = data.get('filename', 'cropped')
+    filename = data.get('filename') or 'cropped'
     
     # If this is from an existing photo (re-cropping), use the same filename
     # If this is a new upload being cropped, generate timestamped name
     if data.get('is_recrop', False):
-        # Re-cropping existing photo - use exact filename to overwrite
-        final_filename = filename
+        # Re-cropping existing photo - overwrite it in place. The name is
+        # sanitised and must already exist so a request can't write outside
+        # the photos directory.
+        final_filename = secure_filename(filename)
+        if not final_filename or not (PHOTOS_DIR / final_filename).is_file():
+            return jsonify({'error': 'Photo to re-crop not found'}), 404
     else:
         # New upload being cropped - generate timestamped name
         name, ext = os.path.splitext(filename)
@@ -415,13 +495,12 @@ def api_delete_photo(filename):
 @app.route('/api/display/<filename>', methods=['POST'])
 def api_display_photo(filename):
     """Display a specific photo immediately."""
-    filepath = PHOTOS_DIR / secure_filename(filename)
+    filename = secure_filename(filename)
+    filepath = PHOTOS_DIR / filename
     if not filepath.exists():
         return jsonify({'error': 'File not found'}), 404
     
-    config = load_config()
-    config['current_photo'] = filename
-    save_config(config)
+    update_config(current_photo=filename)
     
     success = display_photo(filepath)
     return jsonify({'success': success, 'displayed': filename})
@@ -435,23 +514,19 @@ def serve_photo(filename):
 
 @app.route('/photos/<filename>/with-widgets')
 def serve_photo_with_widgets(filename):
-    """Serve a photo with widgets overlaid."""
+    """Serve a photo with widgets overlaid, upright (not rotated for the panel)."""
     filepath = PHOTOS_DIR / secure_filename(filename)
     if not filepath.exists():
         return jsonify({'error': 'File not found'}), 404
     
     try:
-        # Prepare image with widgets
-        img = prepare_display_image(filepath)
-        
-        # Convert to base64 for serving
-        buffer = io.BytesIO()
-        img.save(buffer, format='PNG')
-        
-        return buffer.getvalue(), 200, {'Content-Type': 'image/png'}
-        
-    except Exception as e:
-        return jsonify({'error': f'Failed to render image with widgets: {str(e)}'}), 500
+        img, _ = compose_photo(filepath)
+    except (UnidentifiedImageError, OSError) as e:
+        return jsonify({'error': f'Failed to render image with widgets: {e}'}), 400
+    
+    buffer = io.BytesIO()
+    img.save(buffer, format='PNG')
+    return buffer.getvalue(), 200, {'Content-Type': 'image/png'}
 
 
 @app.route('/api/photos/original/<filename>')
@@ -467,8 +542,11 @@ def api_preview(filename):
     if not filepath.exists():
         return jsonify({'error': 'File not found'}), 404
     
-    img = Image.open(filepath)
-    img.thumbnail((200, 200), Image.Resampling.LANCZOS)
+    try:
+        img = Image.open(filepath)
+        img.thumbnail((200, 200), Image.Resampling.LANCZOS)
+    except (UnidentifiedImageError, OSError):
+        return jsonify({'error': 'File is not a readable image'}), 400
     
     buffer = io.BytesIO()
     img.save(buffer, format='PNG')
@@ -502,30 +580,33 @@ def api_widgets_list():
 @app.route('/api/widgets/<widget_type>', methods=['GET', 'POST'])
 def api_widget_config(widget_type):
     """Get or update specific widget configuration."""
+    widget_class = get_widget(widget_type)
+    if not widget_class:
+        return jsonify({'error': f'Unknown widget type: {widget_type}'}), 404
+    
     if request.method == 'GET':
         config = load_config()
-        widget_config = config.get('widgets', {}).get(widget_type, {})
+        widget_config = config.get('widgets', {}).get(widget_type)
+        if widget_config is None:
+            widget_config = widget_class({}).get_default_config()
         return jsonify(widget_config)
     
     # POST - Update widget configuration
-    config = load_config()
-    if 'widgets' not in config:
-        config['widgets'] = {}
-    
-    data = request.json
-    if not data:
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
         return jsonify({'error': 'No configuration provided'}), 400
     
-    # Validate widget type exists
-    widget_class = get_widget(widget_type)
-    if not widget_class:
-        return jsonify({'error': f'Unknown widget type: {widget_type}'}), 400
+    try:
+        widget_config = widget_class.normalize_config(data)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     
-    # Update configuration
-    config['widgets'][widget_type] = data
-    save_config(config)
+    with config_lock:
+        config = load_config()
+        config.setdefault('widgets', {})[widget_type] = widget_config
+        save_config(config)
     
-    return jsonify({'success': True, 'config': data})
+    return jsonify({'success': True, 'config': widget_config})
 
 
 @app.route('/api/widgets/<widget_type>/options', methods=['GET'])
@@ -551,14 +632,21 @@ def api_widget_options(widget_type):
 
 @app.route('/api/widgets/preview', methods=['POST'])
 def api_widget_preview():
-    """Generate a preview of widgets overlaid on a photo."""
-    data = request.json
-    if not data:
+    """
+    Generate a preview of widgets overlaid on a photo.
+    
+    Accepts {'photo': name, 'widgets': {...}} and returns the composed
+    photo (upright, as the frame shows it) as a data URL without saving
+    the widget configuration.
+    """
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
         return jsonify({'error': 'No data provided'}), 400
     
     photo_filename = data.get('photo')
     widget_configs = data.get('widgets', {})
-    orientation = data.get('orientation', 'landscape')
+    if not isinstance(widget_configs, dict):
+        return jsonify({'error': 'widgets must be an object'}), 400
     
     # Get photo path
     if photo_filename:
@@ -573,65 +661,14 @@ def api_widget_preview():
         photo_path = photos[0]
     
     try:
-        # Load and prepare base image
-        img = Image.open(photo_path)
-        display_width, display_height = get_display_dimensions(orientation)
-        
-        # Detect if image is portrait and rotate if needed
-        img_width, img_height = img.size
-        is_portrait = img_height > img_width
-        if is_portrait:
-            img = img.rotate(90, expand=True)
-        
-        # Resize to display dimensions
-        img = img.resize((display_width, display_height), Image.Resampling.LANCZOS)
-        
-        # Convert to RGBA for widget overlay
-        if img.mode != 'RGBA':
-            img = img.convert('RGBA')
-        
-        # Render widgets with temporary configuration
-        for widget_type, widget_config in widget_configs.items():
-            widget_class = get_widget(widget_type)
-            if not widget_class or not widget_config.get('enabled', False):
-                continue
-            
-            # Update widget config with orientation
-            widget_config = widget_config.copy()
-            widget_config['orientation'] = orientation
-            
-            try:
-                widget = widget_class(widget_config)
-                widget_img = widget.render(display_width, display_height)
-                
-                if widget_img:
-                    x, y = widget.get_position_pixels(display_width, display_height)
-                    
-                    # Ensure widget stays on screen
-                    max_x = display_width - widget_img.width
-                    max_y = display_height - widget_img.height
-                    x = max(0, min(x, max_x))
-                    y = max(0, min(y, max_y))
-                    
-                    img.paste(widget_img, (x, y), widget_img)
-            except Exception as e:
-                print(f"Error rendering preview widget '{widget_type}': {e}")
-        
-        # Convert to RGB for output
-        if img.mode == 'RGBA':
-            rgb_img = Image.new('RGB', img.size, (255, 255, 255))
-            rgb_img.paste(img, (0, 0), img)
-            img = rgb_img
-        
-        # Convert to base64 for response
-        buffer = io.BytesIO()
-        img.save(buffer, format='PNG')
-        b64 = base64.b64encode(buffer.getvalue()).decode()
-        
-        return jsonify({'preview': f'data:image/png;base64,{b64}'})
-        
-    except Exception as e:
-        return jsonify({'error': f'Preview generation failed: {str(e)}'}), 500
+        img, _ = compose_photo(photo_path, widgets_config=widget_configs)
+    except (UnidentifiedImageError, OSError) as e:
+        return jsonify({'error': f'Preview generation failed: {e}'}), 400
+    
+    buffer = io.BytesIO()
+    img.save(buffer, format='PNG')
+    b64 = base64.b64encode(buffer.getvalue()).decode()
+    return jsonify({'preview': f'data:image/png;base64,{b64}'})
 
 
 if __name__ == '__main__':
