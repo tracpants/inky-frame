@@ -659,6 +659,199 @@
                 max-height: 40vh;
             }
         }
+        
+        /* Widget Management Styles */
+        .widget-config {
+            margin-top: 16px;
+            padding: 16px;
+            background: var(--bg);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        
+        .widget-position-container {
+            display: flex;
+            gap: 16px;
+            align-items: flex-start;
+        }
+        
+        @media (max-width: 600px) {
+            .widget-position-container {
+                flex-direction: column;
+                gap: 12px;
+            }
+        }
+        
+        .position-grid {
+            flex-shrink: 0;
+        }
+        
+        .position-preview {
+            width: 120px;
+            height: 72px; /* 800x480 aspect ratio - landscape default */
+            background: var(--surface-hover);
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .position-preview.portrait {
+            width: 72px;
+            height: 120px; /* 480x800 aspect ratio */
+        }
+        
+        .position-marker {
+            width: 12px;
+            height: 8px;
+            background: var(--primary);
+            border-radius: 3px;
+            position: absolute;
+            top: 5%;
+            left: 5%;
+            transition: all 0.2s;
+        }
+        
+        .position-controls {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .position-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        
+        .position-row label {
+            min-width: 50px;
+            font-size: 0.85rem;
+            margin-bottom: 0;
+        }
+        
+        .position-row input[type="range"] {
+            flex: 1;
+            height: 6px;
+        }
+        
+        .widget-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+        }
+        
+        .widget-actions .btn {
+            flex: 1;
+        }
+        
+        /* Widget Preview Modal */
+        .widget-preview-modal .modal-content {
+            max-width: 1000px;
+        }
+        
+        .widget-preview-container {
+            background: var(--bg);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .widget-preview-container img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        
+        /* Simplified Widget Styles */
+        .position-presets {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 8px;
+        }
+        
+        .preset-btn {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: var(--text);
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        
+        .preset-btn:hover {
+            background: var(--surface-hover);
+            border-color: var(--primary);
+        }
+        
+        .preset-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+        
+        .style-presets {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        
+        .style-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+        
+        .style-option:hover {
+            background: var(--surface-hover);
+        }
+        
+        .style-option input[type="radio"] {
+            margin: 0;
+        }
+        
+        .style-preview {
+            width: 60px;
+            height: 20px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: bold;
+        }
+        
+        .style-preview::after {
+            content: "Wed 24";
+        }
+        
+        .style-preview.classic {
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+        }
+        
+        .style-preview.clean {
+            background: rgba(255, 255, 255, 0.8);
+            color: black;
+            border: 1px solid #ddd;
+        }
+        
+        .style-preview.minimal {
+            background: transparent;
+            color: white;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        }
     </style>
 </head>
 <body>
@@ -758,6 +951,67 @@
                     <button class="btn btn-primary" style="width: 100%;" onclick="saveSettings()">
                         Save Settings
                     </button>
+                </div>
+                
+                <div class="card">
+                    <h2>🎨 Display Widgets</h2>
+                    
+                    <div class="settings-group">
+                        <div class="toggle">
+                            <div class="toggle-switch" id="dateWidgetToggle"></div>
+                            <span>Date display</span>
+                        </div>
+                        <div class="widget-config" id="dateWidgetConfig" style="display: none;">
+                            <div class="settings-group" style="margin-bottom: 12px;">
+                                <label>Format: <strong>Wed 24 Dec</strong></label>
+                                <p style="color: var(--text-muted); font-size: 0.85rem; margin: 5px 0;">
+                                    Fixed format with adaptive sizing for optimal readability
+                                </p>
+                            </div>
+                            
+                            <div class="settings-group" style="margin-bottom: 12px;">
+                                <label>Position</label>
+                                <div class="position-presets">
+                                    <button class="preset-btn" data-preset="top_left">Top Left</button>
+                                    <button class="preset-btn" data-preset="top_right">Top Right</button>
+                                    <button class="preset-btn" data-preset="center_top">Center Top</button>
+                                    <button class="preset-btn" data-preset="center_bottom">Center Bottom</button>
+                                    <button class="preset-btn" data-preset="bottom_left">Bottom Left</button>
+                                    <button class="preset-btn active" data-preset="bottom_right">Bottom Right</button>
+                                </div>
+                            </div>
+                            
+                            <div class="settings-group">
+                                <label>Style</label>
+                                <div class="style-presets">
+                                    <label class="style-option">
+                                        <input type="radio" name="dateStyle" value="classic" checked>
+                                        <span class="style-preview classic"></span>
+                                        Classic
+                                    </label>
+                                    <label class="style-option">
+                                        <input type="radio" name="dateStyle" value="clean">
+                                        <span class="style-preview clean"></span>
+                                        Clean
+                                    </label>
+                                    <label class="style-option">
+                                        <input type="radio" name="dateStyle" value="minimal">
+                                        <span class="style-preview minimal"></span>
+                                        Minimal
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="widget-actions">
+                        <button class="btn btn-secondary btn-sm" onclick="previewWidgets()">
+                            👁️ Preview
+                        </button>
+                        <button class="btn btn-primary" onclick="saveWidgetSettings()">
+                            Save Widgets
+                        </button>
+                    </div>
                 </div>
             </aside>
         </div>
@@ -883,6 +1137,28 @@
                 <button class="btn btn-secondary" onclick="openCropFromPreview()" id="editFurtherBtn">✂️ Edit Further</button>
                 <button class="btn btn-primary" onclick="saveAdjustedPreview()" id="saveAdjustedBtn" style="display: none;">💾 Save Adjusted</button>
                 <button class="btn btn-primary" onclick="displayPreviewPhoto()">📺 Display Now</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Widget Preview Modal -->
+    <div class="modal widget-preview-modal" id="widgetPreviewModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Widget Preview</h3>
+                <button class="btn btn-icon btn-secondary" onclick="closeWidgetPreviewModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="widget-preview-container">
+                    <img id="widgetPreviewImage" src="" alt="Widget preview">
+                </div>
+                <p style="text-align: center; color: var(--text-muted); margin-top: 12px; font-size: 0.9rem;">
+                    This shows how widgets will appear over your photos
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeWidgetPreviewModal()">Close</button>
+                <button class="btn btn-primary" onclick="saveWidgetSettings(); closeWidgetPreviewModal();">Save & Apply</button>
             </div>
         </div>
     </div>
@@ -1202,7 +1478,7 @@
             const intervalValue = parseInt(document.getElementById('intervalValue').value);
             const intervalUnit = parseInt(document.getElementById('intervalUnit').value);
             const orientation = document.getElementById('orientationSelect').value;
-            
+
             try {
                 const response = await fetch('/api/config', {
                     method: 'POST',
@@ -1213,10 +1489,10 @@
                         orientation: orientation
                     })
                 });
-                
+
                 const result = await response.json();
                 showToast('Settings saved!');
-                
+
                 // Update status
                 const statusDot = document.getElementById('statusDot');
                 if (cycleEnabled) {
@@ -1224,8 +1500,24 @@
                 } else {
                     statusDot.classList.add('off');
                 }
+
+                // Update widget position preview to match new orientation
+                updatePositionPreviewOrientation();
             } catch (err) {
                 showToast('Error saving settings: ' + err.message, 'error');
+            }
+        }
+
+        function updatePositionPreviewOrientation() {
+            const orientation = document.getElementById('orientationSelect').value;
+            const positionPreview = document.getElementById('datePositionPreview');
+
+            if (positionPreview) {
+                if (orientation === 'portrait') {
+                    positionPreview.classList.add('portrait');
+                } else {
+                    positionPreview.classList.remove('portrait');
+                }
             }
         }
         
@@ -1440,6 +1732,186 @@
                 showToast('Error saving adjusted photo: ' + err.message, 'error');
             }
         }
+        
+        // Simplified Widget Management Functions
+        let widgetConfig = {
+            date: {
+                enabled: false,
+                position: {
+                    preset: 'bottom_right'
+                },
+                style: {
+                    style: 'classic'
+                }
+            }
+        };
+        
+        function initializeWidgets() {
+            // Load current widget configuration
+            fetch('/api/widgets')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.current.date) {
+                        widgetConfig.date = data.current.date;
+                        updateWidgetUI();
+                    }
+                })
+                .catch(err => console.error('Failed to load widget config:', err));
+        }
+        
+        function updateWidgetUI() {
+            const dateConfig = widgetConfig.date;
+            
+            // Update toggle
+            const toggle = document.getElementById('dateWidgetToggle');
+            const configDiv = document.getElementById('dateWidgetConfig');
+            
+            if (dateConfig.enabled) {
+                toggle.classList.add('active');
+                configDiv.style.display = 'block';
+            } else {
+                toggle.classList.remove('active');
+                configDiv.style.display = 'none';
+            }
+            
+            // Update position preset buttons
+            const presetButtons = document.querySelectorAll('.preset-btn');
+            presetButtons.forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.preset === dateConfig.position.preset) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            // Update style radio buttons
+            const styleRadios = document.querySelectorAll('input[name="dateStyle"]');
+            styleRadios.forEach(radio => {
+                radio.checked = radio.value === dateConfig.style.style;
+            });
+        }
+        
+        function updateConfigFromUI() {
+            // Update position from active preset button
+            const activePresetBtn = document.querySelector('.preset-btn.active');
+            if (activePresetBtn) {
+                widgetConfig.date.position.preset = activePresetBtn.dataset.preset;
+            }
+            
+            // Update style from selected radio button
+            const selectedStyleRadio = document.querySelector('input[name="dateStyle"]:checked');
+            if (selectedStyleRadio) {
+                widgetConfig.date.style.style = selectedStyleRadio.value;
+            }
+        }
+        
+        async function previewWidgets() {
+            try {
+                // Get current photo for preview
+                const photos = document.querySelectorAll('.photo-card');
+                let currentPhoto = null;
+                
+                // Find current photo or use first available
+                for (const photo of photos) {
+                    if (photo.classList.contains('current')) {
+                        currentPhoto = photo.dataset.name;
+                        break;
+                    }
+                }
+                
+                if (!currentPhoto && photos.length > 0) {
+                    currentPhoto = photos[0].dataset.name;
+                }
+                
+                // Update widget config from UI
+                updateConfigFromUI();
+                
+                const response = await fetch('/api/widgets/preview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        photo: currentPhoto,
+                        widgets: widgetConfig,
+                        orientation: document.getElementById('orientationSelect').value
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.preview) {
+                    document.getElementById('widgetPreviewImage').src = result.preview;
+                    document.getElementById('widgetPreviewModal').classList.add('active');
+                } else {
+                    showToast('Preview generation failed', 'error');
+                }
+            } catch (err) {
+                showToast('Error generating preview: ' + err.message, 'error');
+            }
+        }
+        
+        
+        function closeWidgetPreviewModal() {
+            document.getElementById('widgetPreviewModal').classList.remove('active');
+        }
+        
+        async function saveWidgetSettings() {
+            try {
+                updateConfigFromUI();
+                
+                // Save date widget config
+                const response = await fetch('/api/widgets/date', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(widgetConfig.date)
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    showToast('Widget settings saved!');
+                } else {
+                    showToast('Error saving widget settings', 'error');
+                }
+            } catch (err) {
+                showToast('Error saving widget settings: ' + err.message, 'error');
+            }
+        }
+        
+        // Initialize widget management
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set up date widget toggle
+            const dateToggle = document.getElementById('dateWidgetToggle');
+            dateToggle.addEventListener('click', () => {
+                dateToggle.classList.toggle('active');
+                widgetConfig.date.enabled = dateToggle.classList.contains('active');
+
+                const configDiv = document.getElementById('dateWidgetConfig');
+                configDiv.style.display = widgetConfig.date.enabled ? 'block' : 'none';
+            });
+
+            // Set up position preset buttons
+            const presetButtons = document.querySelectorAll('.preset-btn');
+            presetButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    // Remove active class from all buttons
+                    presetButtons.forEach(b => b.classList.remove('active'));
+                    // Add active class to clicked button
+                    btn.classList.add('active');
+                    // Update config
+                    widgetConfig.date.position.preset = btn.dataset.preset;
+                });
+            });
+
+            // Set up style radio buttons
+            const styleRadios = document.querySelectorAll('input[name="dateStyle"]');
+            styleRadios.forEach(radio => {
+                radio.addEventListener('change', () => {
+                    if (radio.checked) {
+                        widgetConfig.date.style.style = radio.value;
+                    }
+                });
+            });
+
+            // Initialize widgets
+            initializeWidgets();
+        });
     </script>
 </body>
 </html>
